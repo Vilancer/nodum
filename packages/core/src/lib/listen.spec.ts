@@ -1,5 +1,12 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { AppError, createApp, createRouter, listen } from '../index';
+import {
+  AppError,
+  createApp,
+  createRouter,
+  handle as validated,
+  listen,
+  s,
+} from '../index';
 import type { ListenHandle } from '../index';
 
 describe('listen GET /health', () => {
@@ -323,5 +330,61 @@ describe('listen query last-wins and onion middleware', () => {
     seen.length = 0;
     const api = await fetch(`http://127.0.0.1:${handle.port}/api/x`);
     expect(await api.text()).toBe('{"seen":["mounted","api"]}');
+  });
+});
+
+describe('listen handle() validated routes', () => {
+  let handle: ListenHandle | undefined;
+
+  afterEach(async () => {
+    if (handle !== undefined) {
+      await handle.close();
+      handle = undefined;
+    }
+  });
+
+  it('returns 200 JSON for GET /users/:id via handle params schema mixed with shorthand', async () => {
+    const app = createApp();
+    app.get('/health', () => ({ ok: true }));
+    app.get(
+      '/users/:id',
+      validated({
+        params: s.object({ id: s.string() }),
+        run: (ctx) => ({ id: ctx.params.id }),
+      }),
+    );
+    handle = await listen(app, { port: 0 });
+    const health = await fetch(`http://127.0.0.1:${handle.port}/health`);
+    expect(health.status).toBe(200);
+    expect(await health.text()).toBe('{"ok":true}');
+    const res = await fetch(`http://127.0.0.1:${handle.port}/users/x`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toContain('application/json');
+    expect(await res.text()).toBe('{"id":"x"}');
+  });
+
+  it('returns 400 BAD_REQUEST for GET /users with query n=abc under a number schema', async () => {
+    const app = createApp();
+    app.get(
+      '/users',
+      validated({
+        query: s.object({ n: s.number() }),
+        run: (ctx) => ({ n: ctx.query.n }),
+      }),
+    );
+    handle = await listen(app, { port: 0 });
+    const res = await fetch(`http://127.0.0.1:${handle.port}/users?n=abc`);
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as {
+      code: string;
+      message: string;
+      details?: unknown;
+      stack?: unknown;
+    };
+    expect(body.code).toBe('BAD_REQUEST');
+    expect(typeof body.message).toBe('string');
+    expect(body).not.toHaveProperty('details');
+    expect(body).not.toHaveProperty('stack');
+    expect(Object.keys(body).sort()).toEqual(['code', 'message']);
   });
 });
