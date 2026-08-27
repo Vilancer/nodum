@@ -1,4 +1,4 @@
-import { createRouter } from './router.js';
+import { createRouter, collectMiddleware } from './router.js';
 import type { RouteMatch, Router } from './router.js';
 import type { Handler, Middleware } from './types.js';
 
@@ -79,6 +79,10 @@ export function matchAppRoute(
   pathname: string,
 ): RouteMatch | undefined {
   return requireState(app).router.match(method, pathname);
+}
+
+export function collectAppMiddleware(app: App, pathname: string): Middleware[] {
+  return collectMiddleware(requireState(app).router, pathname);
 }
 
 function requireState(app: App): AppState {

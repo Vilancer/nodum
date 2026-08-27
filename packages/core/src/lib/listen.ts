@@ -1,6 +1,12 @@
 import { createServer } from 'node:http';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { getAppDev, markListening, matchAppRoute, type App } from './app.js';
+import {
+  collectAppMiddleware,
+  getAppDev,
+  markListening,
+  matchAppRoute,
+  type App,
+} from './app.js';
 import { compose } from './compose.js';
 import { buildCtx, requestPathname } from './ctx.js';
 import { finalize, writeCaughtError, writeJsonError } from './errors.js';
@@ -70,18 +76,23 @@ async function handleRequest(
   try {
     const method = req.method ?? 'GET';
     const pathname = requestPathname(req);
-    const match = matchAppRoute(app, method, pathname);
-    if (match === undefined) {
-      writeJsonError(res, 404, 'NOT_FOUND', 'Not Found');
-      return;
+    let routeValue: unknown;
+    let routed = false;
+    const stack = collectAppMiddleware(app, pathname);
+    stack.push(async (innerCtx: Ctx) => {
+      const match = matchAppRoute(app, method, pathname);
+      if (match === undefined) {
+        writeJsonError(innerCtx.res, 404, 'NOT_FOUND', 'Not Found');
+        return;
+      }
+      innerCtx.params = match.params;
+      routeValue = await match.handler(innerCtx);
+      routed = true;
+    });
+    await compose(stack)(ctx);
+    if (routed && !ctx.res.headersSent) {
+      finalize(ctx, routeValue, dev);
     }
-    ctx.params = match.params;
-    await compose([
-      async (innerCtx: Ctx) => {
-        const value = await match.handler(innerCtx);
-        finalize(innerCtx, value, dev);
-      },
-    ])(ctx);
   } catch (error) {
     writeCaughtError(ctx, error, dev);
   }

@@ -226,3 +226,39 @@ function matchLayers(
   }
   return undefined;
 }
+
+export function collectMiddleware(
+  router: Router,
+  pathname: string,
+): Middleware[] {
+  const state = internals.get(router);
+  if (state === undefined) {
+    throw new Error('createRouter() instance required');
+  }
+  const out: Middleware[] = [];
+  for (let i = 0; i < state.layers.length; i += 1) {
+    const layer = state.layers[i];
+    if (layer === undefined) {
+      continue;
+    }
+    if (layer.kind === 'mw') {
+      if (layer.mount === undefined) {
+        out.push(layer.fn);
+      } else if (stripMount(layer.mount, pathname) !== undefined) {
+        out.push(layer.fn);
+      }
+    } else if (layer.kind === 'mount') {
+      const rest = stripMount(layer.mount, pathname);
+      if (rest !== undefined) {
+        const nested = collectMiddleware(layer.router, rest);
+        for (let j = 0; j < nested.length; j += 1) {
+          const mw = nested[j];
+          if (mw !== undefined) {
+            out.push(mw);
+          }
+        }
+      }
+    }
+  }
+  return out;
+}
