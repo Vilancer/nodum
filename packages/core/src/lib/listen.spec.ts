@@ -214,3 +214,114 @@ describe('listen verbs params prefix nested use', () => {
     expect(body.code).toBe('NOT_FOUND');
   });
 });
+
+describe('listen query last-wins and onion middleware', () => {
+  let handle: ListenHandle | undefined;
+
+  afterEach(async () => {
+    if (handle !== undefined) {
+      await handle.close();
+      handle = undefined;
+    }
+  });
+
+  it('uses the last duplicate query value as a string', async () => {
+    const app = createApp();
+    app.get('/q', (ctx) => ({ a: ctx.query.a, keys: Object.keys(ctx.query) }));
+    handle = await listen(app, { port: 0 });
+    const res = await fetch(`http://127.0.0.1:${handle.port}/q?a=1&a=2`);
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe('{"a":"2","keys":["a"]}');
+  });
+
+  it('yields {} for an empty query string', async () => {
+    const app = createApp();
+    app.get('/q', (ctx) => ({ query: ctx.query, missing: ctx.query.nope }));
+    handle = await listen(app, { port: 0 });
+    const res = await fetch(`http://127.0.0.1:${handle.port}/q`);
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe('{"query":{}}');
+  });
+
+  it('runs onion middleware outer then inner then handler', async () => {
+    const app = createApp();
+    const order: string[] = [];
+    app.use(async (_ctx, next) => {
+      order.push('outer');
+      await next();
+      order.push('after');
+    });
+    app.use(async (_ctx, next) => {
+      order.push('inner');
+      await next();
+    });
+    app.get('/onion', () => {
+      order.push('handler');
+      return { order };
+    });
+    handle = await listen(app, { port: 0 });
+    const res = await fetch(`http://127.0.0.1:${handle.port}/onion`);
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe(
+      '{"order":["outer","inner","handler","after"]}',
+    );
+  });
+
+  it('maps AppError thrown in middleware to its status', async () => {
+    const app = createApp();
+    app.use(async () => {
+      throw new AppError(401, 'UNAUTHORIZED', 'nope');
+    });
+    app.get('/x', () => ({ ok: true }));
+    handle = await listen(app, { port: 0 });
+    const res = await fetch(`http://127.0.0.1:${handle.port}/x`);
+    expect(res.status).toBe(401);
+    const body = (await res.json()) as { code: string; message: string };
+    expect(body.code).toBe('UNAUTHORIZED');
+    expect(body.message).toBe('nope');
+  });
+
+  it('maps calling next twice to 500 INTERNAL_ERROR', async () => {
+    const app = createApp();
+    app.use(async (_ctx, next) => {
+      await next();
+      await next();
+    });
+    app.get('/x', () => ({ ok: true }));
+    handle = await listen(app, { port: 0 });
+    const res = await fetch(`http://127.0.0.1:${handle.port}/x`);
+    expect(res.status).toBe(500);
+    const body = (await res.json()) as { code: string; stack?: unknown };
+    expect(body.code).toBe('INTERNAL_ERROR');
+    expect(body).not.toHaveProperty('stack');
+  });
+
+  it('runs mounted middleware only under the prefix', async () => {
+    const app = createApp();
+    app.use('/api', async (ctx, next) => {
+      await next();
+      if (!ctx.res.headersSent) {
+        return;
+      }
+    });
+    const seen: string[] = [];
+    app.use('/api', async (_ctx, next) => {
+      seen.push('mounted');
+      await next();
+    });
+    app.get('/health', () => {
+      seen.push('health');
+      return { seen };
+    });
+    app.get('/api/x', () => {
+      seen.push('api');
+      return { seen };
+    });
+    handle = await listen(app, { port: 0 });
+    const health = await fetch(`http://127.0.0.1:${handle.port}/health`);
+    expect(await health.text()).toBe('{"seen":["health"]}');
+    seen.length = 0;
+    const api = await fetch(`http://127.0.0.1:${handle.port}/api/x`);
+    expect(await api.text()).toBe('{"seen":["mounted","api"]}');
+  });
+});
