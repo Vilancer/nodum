@@ -1,10 +1,15 @@
 import { createRouter } from './router.js';
 import type { RouteMatch, Router } from './router.js';
-import type { Handler } from './types.js';
+import type { Handler, Middleware } from './types.js';
 
 export type App = {
   readonly dev: boolean;
   get(path: string, handler: Handler): App;
+  post(path: string, handler: Handler): App;
+  put(path: string, handler: Handler): App;
+  patch(path: string, handler: Handler): App;
+  delete(path: string, handler: Handler): App;
+  use(pathOrFn: string | Middleware | Router, fn?: Middleware | Router): App;
 };
 
 type AppState = {
@@ -28,8 +33,28 @@ export function createApp(options: { dev?: boolean } = {}): App {
     enumerable: true,
     configurable: false,
   });
-  app.get = (path: string, handler: Handler): App => {
+  app.get = (path, handler) => {
     state.router.get(path, handler);
+    return app;
+  };
+  app.post = (path, handler) => {
+    state.router.post(path, handler);
+    return app;
+  };
+  app.put = (path, handler) => {
+    state.router.put(path, handler);
+    return app;
+  };
+  app.patch = (path, handler) => {
+    state.router.patch(path, handler);
+    return app;
+  };
+  app.delete = (path, handler) => {
+    state.router.delete(path, handler);
+    return app;
+  };
+  app.use = (pathOrFn, fn) => {
+    state.router.use(pathOrFn, fn);
     return app;
   };
   internals.set(app, state);
