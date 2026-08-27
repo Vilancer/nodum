@@ -1,0 +1,27 @@
+{
+  "compileOnSave": false,
+  "compilerOptions": {
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "target": "ES2022",
+    "lib": ["ES2025"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "moduleDetection": "force",
+    "verbatimModuleSyntax": true,
+    "experimentalDecorators": false,
+    "emitDecoratorMetadata": false,
+    "importHelpers": false,
+    "skipLibCheck": true,
+    "declaration": true,
+    "sourceMap": true,
+    "rootDir": ".",
+    "baseUrl": ".",
+    "paths": {
+      "@nodum/core": ["packages/core/src/index.ts"],
+      "@nodum/cli": ["packages/cli/src/index.ts"]
+    }
+  },
+  "exclude": ["node_modules", "tmp"]
+}

@@ -1,0 +1,24 @@
+{
+  "name": "nodum",
+  "private": true,
+  "license": "MIT",
+  "packageManager": "pnpm@11.24.0",
+  "scripts": {
+    "test": "pnpm exec nx run-many -t test --parallel=3"
+  },
+  "nx": {},
+  "devDependencies": {
+    "@nx/eslint": "23.1.2",
+    "@nx/eslint-plugin": "23.1.2",
+    "@nx/js": "23.1.2",
+    "@nx/node": "23.1.2",
+    "@nx/vitest": "23.1.2",
+    "@types/node": "24.13.3",
+    "@vitest/coverage-v8": "4.1.11",
+    "nx": "23.1.2",
+    "typescript": "5.9.3",
+    "vite": "8.2.2",
+    "vite-tsconfig-paths": "6.1.1",
+    "vitest": "4.1.11"
+  }
+}
