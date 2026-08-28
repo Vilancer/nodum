@@ -3,6 +3,7 @@ export { createApp } from './lib/app.js';
 export { createRouter } from './lib/router.js';
 export { listen } from './lib/listen.js';
 export { json } from './lib/json.js';
+export { handle } from './lib/handle.js';
 export { AppError } from './lib/errors.js';
 export { s } from './lib/schema.js';
 export type { Ctx, Handler, Middleware, ListenHandle } from './lib/types.js';
