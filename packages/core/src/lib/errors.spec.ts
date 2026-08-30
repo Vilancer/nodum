@@ -7,6 +7,6 @@ describe('AppError', () => {
     expect(err.status).toBe(400);
     expect(err.code).toBe('BAD_REQUEST');
     expect(err.message).toBe('x');
-    expect(err.name).toBe('AppError');
+    expect(err.name).toBe('AppError/400/BAD_REQUEST');
   });
 });

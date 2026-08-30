@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { createApp, json, listen } from '@nodum/core';
+import { createApp, createRouter, json, listen } from '@nodum/core';
 import type { ListenHandle } from '@nodum/core';
 
 describe('[e2e] HTTP kernel', () => {
@@ -10,6 +10,20 @@ describe('[e2e] HTTP kernel', () => {
       await handle.close();
       handle = undefined;
     }
+  });
+
+  it('answers GET /health on a router mounted at /', async () => {
+    const app = createApp();
+    const child = createRouter();
+    child.get('/health', (ctx) => {
+      void ctx;
+      return { ok: true };
+    });
+    app.use(child, undefined);
+    handle = await listen(app, { port: 0 });
+    const res = await fetch(`http://127.0.0.1:${handle.port}/health`);
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe('{"ok":true}');
   });
 
   it('answers GET /health with compact JSON {ok:true}', async () => {

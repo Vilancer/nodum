@@ -73,6 +73,9 @@ export function stripMount(
   pathname: string,
 ): string | undefined {
   const prefix = joinPrefix('', mount);
+  if (prefix === '/') {
+    return pathname.length === 0 ? '/' : pathname;
+  }
   if (pathname === prefix) {
     return '/';
   }

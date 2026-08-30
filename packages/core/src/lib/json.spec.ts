@@ -135,6 +135,61 @@ describe('json()', () => {
     expect(body.code).toBe('PAYLOAD_TOO_LARGE');
   });
 
+  it('throws when json({ limit }) is NaN, Infinity, or negative', () => {
+    expect(() => json({ limit: Number.NaN })).toThrow(
+      'json({ limit }) must be a finite non-negative number',
+    );
+    expect(() => json({ limit: Number.POSITIVE_INFINITY })).toThrow(
+      'json({ limit }) must be a finite non-negative number',
+    );
+    expect(() => json({ limit: -1 })).toThrow(
+      'json({ limit }) must be a finite non-negative number',
+    );
+  });
+
+  it('returns 413 JSON for a chunked body over the limit without resetting the socket', async () => {
+    const app = createApp();
+    app.use(json({ limit: 8 }), undefined);
+    app.post('/echo', (ctx) => echoBody(ctx));
+    handle = await listen(app, { port: 0 });
+    const { status, body } = await new Promise<{
+      status: number;
+      body: { code: string };
+    }>((resolve, reject) => {
+      const req = httpRequest(
+        {
+          host: '127.0.0.1',
+          port: handle?.port,
+          path: '/echo',
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Transfer-Encoding': 'chunked',
+          },
+        },
+        (res) => {
+          const chunks: Buffer[] = [];
+          res.on('data', (chunk: Buffer) => {
+            chunks.push(chunk);
+          });
+          res.on('end', () => {
+            resolve({
+              status: res.statusCode ?? 0,
+              body: JSON.parse(Buffer.concat(chunks).toString('utf8')) as {
+                code: string;
+              },
+            });
+          });
+        },
+      );
+      req.on('error', reject);
+      req.write('123456789');
+      req.end();
+    });
+    expect(status).toBe(413);
+    expect(body.code).toBe('PAYLOAD_TOO_LARGE');
+  });
+
   it('leaves ctx.body undefined for text/plain', async () => {
     const app = createApp();
     app.use(json(), undefined);

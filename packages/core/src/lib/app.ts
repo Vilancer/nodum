@@ -80,6 +80,10 @@ export function markListening(app: App): void {
   state.listening = true;
 }
 
+export function clearListening(app: App): void {
+  requireState(app).listening = false;
+}
+
 export function matchAppRoute(
   app: App,
   method: string,

@@ -5,7 +5,7 @@ import type { Middleware } from './types.js';
 const DEFAULT_LIMIT = 1048576;
 
 export function json(options: { limit?: number } = {}): Middleware {
-  const limit = options.limit ?? DEFAULT_LIMIT;
+  const limit = resolveLimit(options.limit);
   return async (ctx, next) => {
     if (!isApplicationJson(ctx.headers.get('content-type'))) {
       await next();
@@ -15,6 +15,7 @@ export function json(options: { limit?: number } = {}): Middleware {
     if (contentLength !== undefined) {
       const n = Number(contentLength);
       if (Number.isFinite(n) && n > limit) {
+        ctx.req.resume();
         throw new AppError(413, 'PAYLOAD_TOO_LARGE', 'Payload too large');
       }
     }
@@ -31,6 +32,14 @@ export function json(options: { limit?: number } = {}): Middleware {
     }
     await next();
   };
+}
+
+function resolveLimit(limit: number | undefined): number {
+  const value = limit === undefined ? DEFAULT_LIMIT : limit;
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+    throw new Error('json({ limit }) must be a finite non-negative number');
+  }
+  return value;
 }
 
 function isApplicationJson(header: string | undefined): boolean {
@@ -57,10 +66,13 @@ function readLimited(req: IncomingMessage, limit: number): Promise<Buffer> {
       reject(error);
     };
     const onData = (chunk: Buffer): void => {
+      if (settled) {
+        return;
+      }
       const buf = chunk;
       if (total + buf.byteLength > limit) {
-        req.destroy();
         fail(new AppError(413, 'PAYLOAD_TOO_LARGE', 'Payload too large'));
+        req.resume();
         return;
       }
       total += buf.byteLength;

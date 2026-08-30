@@ -133,6 +133,31 @@ describe('listen GET /health', () => {
     await expect(listen(app, { port: 0 })).rejects.toThrow();
   });
 
+  it('allows listen() again after a bind failure', async () => {
+    const holder = createApp();
+    holder.get('/health', () => ({ ok: true }));
+    const occupied = await listen(holder, { port: 0 });
+    const app = createApp();
+    app.get('/health', () => ({ ok: true }));
+    await expect(listen(app, { port: occupied.port })).rejects.toThrow();
+    handle = await listen(app, { port: 0 });
+    const res = await fetch(`http://127.0.0.1:${handle.port}/health`);
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe('{"ok":true}');
+    await occupied.close();
+  });
+
+  it('matches child routes when a router is mounted at /', async () => {
+    const app = createApp();
+    const child = createRouter();
+    child.get('/health', () => ({ ok: true }));
+    app.use(child, undefined);
+    handle = await listen(app, { port: 0 });
+    const res = await fetch(`http://127.0.0.1:${handle.port}/health`);
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe('{"ok":true}');
+  });
+
   it('removes SIGINT listeners on close and is idempotent', async () => {
     const app = createApp();
     app.get('/health', () => ({ ok: true }));

@@ -1,6 +1,7 @@
 import { createServer } from 'node:http';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import {
+  clearListening,
   collectAppMiddleware,
   getAppDev,
   markListening,
@@ -24,20 +25,31 @@ export async function listen(
   const server = createServer((req, res) => {
     void handleRequest(app, req, res);
   });
-  await new Promise<void>((resolve, reject) => {
-    const onError = (error: Error): void => {
-      reject(error);
-    };
-    server.once('error', onError);
-    server.listen(options.port, host, () => {
-      resolve();
+  let port: number;
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const onError = (error: Error): void => {
+        reject(error);
+      };
+      server.once('error', onError);
+      server.listen(options.port, host, () => {
+        resolve();
+      });
     });
-  });
-  const addr = server.address();
-  if (addr === null || typeof addr === 'string') {
-    throw new Error('listen() failed to determine bound port');
+    const addr = server.address();
+    if (addr === null || typeof addr === 'string') {
+      throw new Error('listen() failed to determine bound port');
+    }
+    port = addr.port;
+  } catch (error) {
+    clearListening(app);
+    await new Promise<void>((resolve) => {
+      server.close(() => {
+        resolve();
+      });
+    });
+    throw error;
   }
-  const { port } = addr;
   let closed = false;
   const onSignal = (): void => {
     void close();

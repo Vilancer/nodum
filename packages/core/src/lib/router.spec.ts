@@ -44,6 +44,12 @@ describe('stripMount', () => {
   it('does not match /apifoo for mount /api', () => {
     expect(stripMount('/api', '/apifoo')).toBeUndefined();
   });
+
+  it('treats mount / as matching every pathname unchanged', () => {
+    expect(stripMount('/', '/')).toBe('/');
+    expect(stripMount('/', '/health')).toBe('/health');
+    expect(stripMount('/', '/api/users')).toBe('/api/users');
+  });
 });
 
 describe('createRouter', () => {

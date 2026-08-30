@@ -1,32 +1,39 @@
 import type { ServerResponse } from 'node:http';
 import type { Ctx } from './types.js';
 
-const appErrors: AppError[] = [];
-
 export class AppError extends Error {
   readonly status: number;
   readonly code: string;
 
   constructor(status: number, code: string, message: string) {
     super(message);
-    this.name = 'AppError';
+    this.name = `AppError/${String(status)}/${code}`;
     this.status = status;
     this.code = code;
-    appErrors.push(this);
   }
 }
 
-function matchAppError(error: unknown): AppError | undefined {
+function matchAppError(
+  error: unknown,
+): { status: number; code: string; message: string } | undefined {
   if (!(error instanceof Error)) {
     return undefined;
   }
-  for (let i = 0; i < appErrors.length; i += 1) {
-    const appError = appErrors[i];
-    if (appError !== undefined && appError === error) {
-      return appError;
-    }
+  const prefix = 'AppError/';
+  if (!error.name.startsWith(prefix)) {
+    return undefined;
   }
-  return undefined;
+  const rest = error.name.slice(prefix.length);
+  const slash = rest.indexOf('/');
+  if (slash < 1) {
+    return undefined;
+  }
+  const status = Number(rest.slice(0, slash));
+  const code = rest.slice(slash + 1);
+  if (!Number.isFinite(status) || code.length === 0) {
+    return undefined;
+  }
+  return { status, code, message: error.message };
 }
 
 export function writeJsonError(
