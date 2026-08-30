@@ -37,7 +37,18 @@ export default [
       '**/*.cjs',
       '**/*.mjs',
     ],
-    rules: {},
+    rules: {
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
+      ],
+    },
+  },
+  {
+    files: ['e2e/fixtures/**/*.ts'],
+    rules: {
+      '@nx/enforce-module-boundaries': 'off',
+    },
   },
   eslintConfigPrettier,
 ];

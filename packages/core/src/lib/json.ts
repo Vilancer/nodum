@@ -54,11 +54,10 @@ function readLimited(req: IncomingMessage, limit: number): Promise<Buffer> {
         return;
       }
       settled = true;
-      cleanup();
       reject(error);
     };
-    const onData = (chunk: Buffer | string): void => {
-      const buf = typeof chunk === 'string' ? Buffer.from(chunk) : chunk;
+    const onData = (chunk: Buffer): void => {
+      const buf = chunk;
       if (total + buf.byteLength > limit) {
         req.destroy();
         fail(new AppError(413, 'PAYLOAD_TOO_LARGE', 'Payload too large'));
@@ -72,16 +71,10 @@ function readLimited(req: IncomingMessage, limit: number): Promise<Buffer> {
         return;
       }
       settled = true;
-      cleanup();
       resolve(Buffer.concat(chunks));
     };
     const onError = (error: Error): void => {
       fail(error);
-    };
-    const cleanup = (): void => {
-      req.off('data', onData);
-      req.off('end', onEnd);
-      req.off('error', onError);
     };
     req.on('data', onData);
     req.on('end', onEnd);

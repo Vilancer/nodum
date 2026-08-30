@@ -9,7 +9,10 @@ export type App = {
   put(path: string, handler: Handler): App;
   patch(path: string, handler: Handler): App;
   delete(path: string, handler: Handler): App;
-  use(pathOrFn: string | Middleware | Router, fn?: Middleware | Router): App;
+  use(
+    pathOrFn: string | Middleware | Router,
+    fn: Middleware | Router | undefined,
+  ): App;
 };
 
 type AppState = {
@@ -18,7 +21,12 @@ type AppState = {
   router: Router;
 };
 
-const internals = new WeakMap<App, AppState>();
+type AppRow = {
+  app: App;
+  state: AppState;
+};
+
+const apps: AppRow[] = [];
 
 export function createApp(options: { dev?: boolean } = {}): App {
   const state: AppState = {
@@ -26,38 +34,37 @@ export function createApp(options: { dev?: boolean } = {}): App {
     listening: false,
     router: createRouter(),
   };
-  const app = {} as App;
-  Object.defineProperty(app, 'dev', {
-    value: state.dev,
-    writable: false,
-    enumerable: true,
-    configurable: false,
-  });
-  app.get = (path, handler) => {
-    state.router.get(path, handler);
-    return app;
+  const app: App = {
+    dev: state.dev,
+    get(path: string, handler: Handler): App {
+      state.router.get(path, handler);
+      return app;
+    },
+    post(path: string, handler: Handler): App {
+      state.router.post(path, handler);
+      return app;
+    },
+    put(path: string, handler: Handler): App {
+      state.router.put(path, handler);
+      return app;
+    },
+    patch(path: string, handler: Handler): App {
+      state.router.patch(path, handler);
+      return app;
+    },
+    delete(path: string, handler: Handler): App {
+      state.router.delete(path, handler);
+      return app;
+    },
+    use(
+      pathOrFn: string | Middleware | Router,
+      fn: Middleware | Router | undefined,
+    ): App {
+      state.router.use(pathOrFn, fn);
+      return app;
+    },
   };
-  app.post = (path, handler) => {
-    state.router.post(path, handler);
-    return app;
-  };
-  app.put = (path, handler) => {
-    state.router.put(path, handler);
-    return app;
-  };
-  app.patch = (path, handler) => {
-    state.router.patch(path, handler);
-    return app;
-  };
-  app.delete = (path, handler) => {
-    state.router.delete(path, handler);
-    return app;
-  };
-  app.use = (pathOrFn, fn) => {
-    state.router.use(pathOrFn, fn);
-    return app;
-  };
-  internals.set(app, state);
+  apps.push({ app, state });
   return app;
 }
 
@@ -86,9 +93,11 @@ export function collectAppMiddleware(app: App, pathname: string): Middleware[] {
 }
 
 function requireState(app: App): AppState {
-  const state = internals.get(app);
-  if (state === undefined) {
-    throw new Error('createApp() instance required');
+  for (let i = 0; i < apps.length; i += 1) {
+    const row = apps[i];
+    if (row !== undefined && row.app === app) {
+      return row.state;
+    }
   }
-  return state;
+  throw new Error('createApp() instance required');
 }

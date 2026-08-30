@@ -15,10 +15,15 @@ Pin **`scriptc` `0.0.35`** exact (no `^`, no `~`). The compiler is Vercel Labs. 
 
 ## Commands (run from repo root)
 
-- **Test:** `pnpm test`
+- **Unit:** `pnpm test` (Nx Vitest beside sources)
+- **Node E2E:** `pnpm test:e2e` (`[e2e]` specs in `e2e/`)
+- **scriptc:** `pnpm test:scriptc` (coverage must be fully static; native `/health` binary)
+- **All gates:** `pnpm test:all`
 - **Build:** `pnpm exec nx run-many -t build`
 - **Lint:** `pnpm exec nx run-many -t lint`
 - **Single project:** `pnpm exec nx run core:test`
+
+Every inner PR and every GSD execute/verify step must run **unit + Node E2E + scriptc**. CI (`.github/workflows/ci.yml`) is the hard gate. Do not land kernel or compiler work on green unit tests alone.
 
 ## Architecture flags
 

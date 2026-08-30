@@ -4,7 +4,10 @@
   "license": "MIT",
   "packageManager": "pnpm@11.24.0",
   "scripts": {
-    "test": "pnpm exec nx run-many -t test --parallel=3",
+    "test": "pnpm exec nx run-many -t test --parallel=3 --exclude=nodum",
+    "test:e2e": "pnpm exec vitest run --config e2e/vitest.config.mts e2e/http-kernel.e2e.spec.ts",
+    "test:scriptc": "pnpm exec vitest run --config e2e/vitest.config.mts e2e/scriptc.e2e.spec.ts",
+    "test:all": "pnpm test && pnpm test:e2e && pnpm test:scriptc",
     "prepare": "husky"
   },
   "lint-staged": {

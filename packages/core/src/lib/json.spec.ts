@@ -19,7 +19,7 @@ describe('json()', () => {
 
   it('parses application/json into ctx.body as unknown', async () => {
     const app = createApp();
-    app.use(json());
+    app.use(json(), undefined);
     app.post('/echo', (ctx) => echoBody(ctx));
     handle = await listen(app, { port: 0 });
     const res = await fetch(`http://127.0.0.1:${handle.port}/echo`, {
@@ -33,7 +33,7 @@ describe('json()', () => {
 
   it('parses application/json; charset=utf-8', async () => {
     const app = createApp();
-    app.use(json());
+    app.use(json(), undefined);
     app.post('/echo', (ctx) => echoBody(ctx));
     handle = await listen(app, { port: 0 });
     const res = await fetch(`http://127.0.0.1:${handle.port}/echo`, {
@@ -47,7 +47,7 @@ describe('json()', () => {
 
   it('leaves ctx.body undefined for an empty application/json body', async () => {
     const app = createApp();
-    app.use(json());
+    app.use(json(), undefined);
     app.post('/echo', (ctx) => echoBody(ctx));
     handle = await listen(app, { port: 0 });
     const res = await fetch(`http://127.0.0.1:${handle.port}/echo`, {
@@ -61,7 +61,7 @@ describe('json()', () => {
 
   it('parses {} as an empty object distinct from an empty body', async () => {
     const app = createApp();
-    app.use(json());
+    app.use(json(), undefined);
     app.post('/echo', (ctx) => echoBody(ctx));
     handle = await listen(app, { port: 0 });
     const res = await fetch(`http://127.0.0.1:${handle.port}/echo`, {
@@ -75,7 +75,7 @@ describe('json()', () => {
 
   it('returns 413 PAYLOAD_TOO_LARGE when Content-Length exceeds 1048576', async () => {
     const app = createApp();
-    app.use(json());
+    app.use(json(), undefined);
     app.post('/echo', (ctx) => echoBody(ctx));
     handle = await listen(app, { port: 0 });
     const { status, body } = await new Promise<{
@@ -122,7 +122,7 @@ describe('json()', () => {
 
   it('rejects a 9-byte body when json({ limit: 8 })', async () => {
     const app = createApp();
-    app.use(json({ limit: 8 }));
+    app.use(json({ limit: 8 }), undefined);
     app.post('/echo', (ctx) => echoBody(ctx));
     handle = await listen(app, { port: 0 });
     const res = await fetch(`http://127.0.0.1:${handle.port}/echo`, {
@@ -137,7 +137,7 @@ describe('json()', () => {
 
   it('leaves ctx.body undefined for text/plain', async () => {
     const app = createApp();
-    app.use(json());
+    app.use(json(), undefined);
     app.post('/echo', (ctx) => echoBody(ctx));
     handle = await listen(app, { port: 0 });
     const res = await fetch(`http://127.0.0.1:${handle.port}/echo`, {
@@ -151,7 +151,7 @@ describe('json()', () => {
 
   it('does not parse application/ld+json', async () => {
     const app = createApp();
-    app.use(json());
+    app.use(json(), undefined);
     app.post('/echo', (ctx) => echoBody(ctx));
     handle = await listen(app, { port: 0 });
     const res = await fetch(`http://127.0.0.1:${handle.port}/echo`, {

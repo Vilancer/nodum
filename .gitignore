@@ -147,3 +147,5 @@ vite.config.ts.timestamp-*
 .nx/workspace-data
 vitest.config.*.timestamp*
 tmp/
+.scriptc/
+

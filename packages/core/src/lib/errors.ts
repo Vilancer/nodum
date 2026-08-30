@@ -1,6 +1,8 @@
 import type { ServerResponse } from 'node:http';
 import type { Ctx } from './types.js';
 
+const appErrors: AppError[] = [];
+
 export class AppError extends Error {
   readonly status: number;
   readonly code: string;
@@ -10,7 +12,21 @@ export class AppError extends Error {
     this.name = 'AppError';
     this.status = status;
     this.code = code;
+    appErrors.push(this);
   }
+}
+
+function matchAppError(error: unknown): AppError | undefined {
+  if (!(error instanceof Error)) {
+    return undefined;
+  }
+  for (let i = 0; i < appErrors.length; i += 1) {
+    const appError = appErrors[i];
+    if (appError !== undefined && appError === error) {
+      return appError;
+    }
+  }
+  return undefined;
 }
 
 export function writeJsonError(
@@ -39,8 +55,9 @@ export function writeCaughtError(ctx: Ctx, error: unknown, dev: boolean): void {
   if (ctx.res.headersSent) {
     return;
   }
-  if (error instanceof AppError) {
-    writeJsonError(ctx.res, error.status, error.code, error.message);
+  const appError = matchAppError(error);
+  if (appError !== undefined) {
+    writeJsonError(ctx.res, appError.status, appError.code, appError.message);
     return;
   }
   if (dev) {

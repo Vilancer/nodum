@@ -12,10 +12,7 @@ export type Ctx = {
 
 export type Handler = (ctx: Ctx) => unknown | Promise<unknown>;
 
-export type Middleware = (
-  ctx: Ctx,
-  next: () => Promise<void>,
-) => void | Promise<void>;
+export type Middleware = (ctx: Ctx, next: () => Promise<void>) => Promise<void>;
 
 export type ListenHandle = {
   port: number;

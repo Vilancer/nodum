@@ -12,7 +12,10 @@ export type Router = {
   put(path: string, handler: Handler): Router;
   patch(path: string, handler: Handler): Router;
   delete(path: string, handler: Handler): Router;
-  use(pathOrFn: string | Middleware | Router, fn?: Middleware | Router): Router;
+  use(
+    pathOrFn: string | Middleware | Router,
+    fn: Middleware | Router | undefined,
+  ): Router;
   match(method: string, pathname: string): RouteMatch | undefined;
 };
 
@@ -42,7 +45,12 @@ type RouterState = {
   layers: Layer[];
 };
 
-const internals = new WeakMap<Router, RouterState>();
+type RouterRow = {
+  router: Router;
+  state: RouterState;
+};
+
+const routers: RouterRow[] = [];
 
 export function joinPrefix(left: string, right: string): string {
   let l = left;
@@ -98,7 +106,7 @@ export function matchPath(
       try {
         params[p.slice(1)] = decodeURIComponent(u);
       } catch (error) {
-        if (error instanceof URIError) {
+        if (error instanceof Error && error.name === 'URIError') {
           throw new AppError(400, 'BAD_REQUEST', error.message);
         }
         throw error;
@@ -115,39 +123,53 @@ export function createRouter(options: { prefix?: string } = {}): Router {
     prefix: options.prefix ?? '',
     layers: [],
   };
-  const router = {} as Router;
-  router.get = (path, handler) => {
-    addRoute(state, 'GET', path, handler);
-    return router;
+  const router: Router = {
+    get(path: string, handler: Handler): Router {
+      addRoute(state, 'GET', path, handler);
+      return router;
+    },
+    post(path: string, handler: Handler): Router {
+      addRoute(state, 'POST', path, handler);
+      return router;
+    },
+    put(path: string, handler: Handler): Router {
+      addRoute(state, 'PUT', path, handler);
+      return router;
+    },
+    patch(path: string, handler: Handler): Router {
+      addRoute(state, 'PATCH', path, handler);
+      return router;
+    },
+    delete(path: string, handler: Handler): Router {
+      addRoute(state, 'DELETE', path, handler);
+      return router;
+    },
+    use(
+      pathOrFn: string | Middleware | Router,
+      fn: Middleware | Router | undefined,
+    ): Router {
+      addUse(state, pathOrFn, fn);
+      return router;
+    },
+    match(method: string, pathname: string): RouteMatch | undefined {
+      return matchLayers(state.layers, method, pathname);
+    },
   };
-  router.post = (path, handler) => {
-    addRoute(state, 'POST', path, handler);
-    return router;
-  };
-  router.put = (path, handler) => {
-    addRoute(state, 'PUT', path, handler);
-    return router;
-  };
-  router.patch = (path, handler) => {
-    addRoute(state, 'PATCH', path, handler);
-    return router;
-  };
-  router.delete = (path, handler) => {
-    addRoute(state, 'DELETE', path, handler);
-    return router;
-  };
-  router.use = (pathOrFn, fn) => {
-    addUse(state, pathOrFn, fn);
-    return router;
-  };
-  router.match = (method, pathname) =>
-    matchLayers(state.layers, method, pathname);
-  internals.set(router, state);
+  routers.push({ router, state });
   return router;
 }
 
 function isRouter(value: Middleware | Router): value is Router {
-  return typeof value === 'object' && value !== null && internals.has(value);
+  if (typeof value !== 'object' || value === null) {
+    return false;
+  }
+  for (let i = 0; i < routers.length; i += 1) {
+    const row = routers[i];
+    if (row !== undefined && row.router === value) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function addRoute(
@@ -175,7 +197,7 @@ function addRoute(
 function addUse(
   state: RouterState,
   pathOrFn: string | Middleware | Router,
-  fn?: Middleware | Router,
+  fn: Middleware | Router | undefined,
 ): void {
   if (typeof pathOrFn === 'string') {
     if (fn === undefined) {
@@ -227,14 +249,21 @@ function matchLayers(
   return undefined;
 }
 
+function requireRouterState(router: Router): RouterState {
+  for (let i = 0; i < routers.length; i += 1) {
+    const row = routers[i];
+    if (row !== undefined && row.router === router) {
+      return row.state;
+    }
+  }
+  throw new Error('createRouter() instance required');
+}
+
 export function collectMiddleware(
   router: Router,
   pathname: string,
 ): Middleware[] {
-  const state = internals.get(router);
-  if (state === undefined) {
-    throw new Error('createRouter() instance required');
-  }
+  const state = requireRouterState(router);
   const out: Middleware[] = [];
   for (let i = 0; i < state.layers.length; i += 1) {
     const layer = state.layers[i];

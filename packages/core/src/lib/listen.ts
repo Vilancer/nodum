@@ -30,7 +30,6 @@ export async function listen(
     };
     server.once('error', onError);
     server.listen(options.port, host, () => {
-      server.off('error', onError);
       resolve();
     });
   });
@@ -48,17 +47,16 @@ export async function listen(
       return;
     }
     closed = true;
-    process.off('SIGINT', onSignal);
-    process.off('SIGTERM', onSignal);
+    process.removeListener('SIGINT', onSignal);
+    process.removeListener('SIGTERM', onSignal);
     await new Promise<void>((resolve, reject) => {
-      server.close((err) => {
-        if (err) {
-          reject(err);
-          return;
-        }
+      const onCloseError = (error: Error): void => {
+        reject(error);
+      };
+      server.once('error', onCloseError);
+      server.close(() => {
         resolve();
       });
-      server.closeAllConnections();
     });
   }
   process.on('SIGINT', onSignal);
@@ -79,7 +77,11 @@ async function handleRequest(
     let routeValue: unknown;
     let routed = false;
     const stack = collectAppMiddleware(app, pathname);
-    stack.push(async (innerCtx: Ctx) => {
+    stack.push((innerCtx: Ctx, next: () => Promise<void>): Promise<void> => {
+      void next;
+      return runRoute(innerCtx);
+    });
+    async function runRoute(innerCtx: Ctx): Promise<void> {
       const match = matchAppRoute(app, method, pathname);
       if (match === undefined) {
         writeJsonError(innerCtx.res, 404, 'NOT_FOUND', 'Not Found');
@@ -88,7 +90,7 @@ async function handleRequest(
       innerCtx.params = match.params;
       routeValue = await match.handler(innerCtx);
       routed = true;
-    });
+    }
     await compose(stack)(ctx);
     if (routed && !ctx.res.headersSent) {
       finalize(ctx, routeValue, dev);

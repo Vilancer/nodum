@@ -257,11 +257,11 @@ describe('listen query last-wins and onion middleware', () => {
       order.push('outer');
       await next();
       order.push('after');
-    });
+    }, undefined);
     app.use(async (_ctx, next) => {
       order.push('inner');
       await next();
-    });
+    }, undefined);
     app.get('/onion', () => {
       order.push('handler');
       return { order };
@@ -278,7 +278,7 @@ describe('listen query last-wins and onion middleware', () => {
     const app = createApp();
     app.use(async () => {
       throw new AppError(401, 'UNAUTHORIZED', 'nope');
-    });
+    }, undefined);
     app.get('/x', () => ({ ok: true }));
     handle = await listen(app, { port: 0 });
     const res = await fetch(`http://127.0.0.1:${handle.port}/x`);
@@ -293,7 +293,7 @@ describe('listen query last-wins and onion middleware', () => {
     app.use(async (_ctx, next) => {
       await next();
       await next();
-    });
+    }, undefined);
     app.get('/x', () => ({ ok: true }));
     handle = await listen(app, { port: 0 });
     const res = await fetch(`http://127.0.0.1:${handle.port}/x`);
