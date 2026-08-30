@@ -148,4 +148,5 @@ vite.config.ts.timestamp-*
 vitest.config.*.timestamp*
 tmp/
 .scriptc/
+bench/.out/
 

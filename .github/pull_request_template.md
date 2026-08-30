@@ -19,8 +19,6 @@ Required: **scriptc native** vs the **same TypeScript sources** on **Node** (`no
 | Bun (optional)      |         |             |     |               |
 | Deno (optional)     |         |             |     |               |
 
-Previous row: `bench/results/` (or _not yet — `pnpm bench` lands with hello / PERF-01_).
+Previous row: latest file in `bench/results/` (run `pnpm bench` and paste this run vs that file).
 
 Do not fail the PR only because Node JIT is faster on a hot loop. FLAG native RSS/size in the Node/engine class, or a regression vs the previous saved row.
-
-When `pnpm bench` exists, append this run under `bench/results/` (keep history for later / bigger benches).

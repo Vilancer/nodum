@@ -1,0 +1,71 @@
+{
+  "id": "health",
+  "fixture": "e2e/fixtures/health.ts",
+  "recorded_at": "2026-08-30T10:05:47.926Z",
+  "host": {
+    "os": "linux",
+    "arch": "x64",
+    "node": "v22.22.1",
+    "bun": "1.3.14",
+    "deno": "deno 2.7.14 (stable, release, x86_64-unknown-linux-gnu)"
+  },
+  "method": {
+    "warmup": 20,
+    "samples": 200,
+    "notes": "Startup is spawn until NODUM_PORT. Latency is sequential GET /health after warmup. RSS is VmRSS after samples. scriptc artifact is --optimization dev."
+  },
+  "rows": [
+    {
+      "id": "scriptc",
+      "label": "scriptc native",
+      "skipped": false,
+      "startup_ms": 1.57,
+      "first_get_ms": 30.46,
+      "p50_ms": 0.31,
+      "p95_ms": 0.62,
+      "rps": 2834.4,
+      "rss_kb": 3424,
+      "artifact_bytes": 945008
+    },
+    {
+      "id": "node",
+      "label": "Node (tsx)",
+      "skipped": false,
+      "startup_ms": 207.11,
+      "first_get_ms": 4.03,
+      "p50_ms": 0.27,
+      "p95_ms": 0.62,
+      "rps": 3010.1,
+      "rss_kb": 83520,
+      "artifact_bytes": null
+    },
+    {
+      "id": "bun",
+      "label": "Bun (process)",
+      "skipped": false,
+      "startup_ms": 38.12,
+      "first_get_ms": 4.86,
+      "p50_ms": 0.3,
+      "p95_ms": 0.92,
+      "rps": 2635.4,
+      "rss_kb": 81428,
+      "artifact_bytes": null
+    },
+    {
+      "id": "deno",
+      "label": "Deno (process)",
+      "skipped": false,
+      "startup_ms": 31.47,
+      "first_get_ms": 2.72,
+      "p50_ms": 0.26,
+      "p95_ms": 0.65,
+      "rps": 3008.2,
+      "rss_kb": 78288,
+      "artifact_bytes": null
+    }
+  ],
+  "compile_contrast": {
+    "bun_compile_bytes": 76889352,
+    "deno_compile_bytes": null
+  }
+}

@@ -19,6 +19,7 @@ Pin **`scriptc` `0.0.35`** exact (no `^`, no `~`). The compiler is Vercel Labs. 
 - **Node E2E:** `pnpm test:e2e` (`[e2e]` specs in `e2e/`)
 - **scriptc:** `pnpm test:scriptc` (coverage must be fully static; native `/health` binary)
 - **All gates:** `pnpm test:all`
+- **Bench:** `pnpm bench` (hello `/health`; writes `bench/results/`)
 - **Build:** `pnpm exec nx run-many -t build`
 - **Lint:** `pnpm exec nx run-many -t lint`
 - **Single project:** `pnpm exec nx run core:test`
@@ -33,7 +34,7 @@ Every user-facing PR body must include a **Performance** section (see `.github/p
 
 - **Required:** scriptc native binary vs the **same sources** on **Node** (`node` / `tsx`): startup, request latency/throughput, RSS, artifact size.
 - **Optional:** Bun and Deno rows when those tools are on PATH (contrast only — they embed an engine).
-- Append the run to `bench/results/` when `pnpm bench` exists so later / bigger benches have a baseline. Until then, keep the heading and say the script is not landed yet.
+- Run `pnpm bench` and append the JSON under `bench/results/` so later / bigger benches have a baseline. Paste this run vs the previous file into the PR body.
 - Bench tooling is **devDependencies** only. Do not add Bun or Deno to `@nodum/core`.
 - Do not fail CI only because Node JIT is faster on a hot loop. FLAG native RSS/size looking like Node/engine, or a drop vs the last saved row.
 
