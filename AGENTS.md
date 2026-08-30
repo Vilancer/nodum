@@ -36,7 +36,7 @@ Every user-facing PR body must include a **Performance** section (see `.github/p
 - **Optional:** Bun and Deno rows when those tools are on PATH (contrast only — they embed an engine).
 - Run `pnpm bench` and append the JSON under `bench/results/` so later / bigger benches have a baseline. Paste this run vs the previous file into the PR body.
 - Bench tooling is **devDependencies** only. Do not add Bun or Deno to `@nodum/core`.
-- Do not fail CI only because Node JIT is faster on a hot loop. FLAG native RSS/size looking like Node/engine, or a drop vs the last saved row.
+- Always explain in the Performance section why scriptc can look weaker on some cells (first GET is a cold native path; engines already paid boot/`tsx` transform; Node JIT may win hot p50). Compare startup+first GET together. FLAG only if native RSS/size looks like the Node/engine class, or drops vs the last saved row.
 
 ## Architecture flags
 

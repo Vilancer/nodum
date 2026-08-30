@@ -12,7 +12,7 @@
   "method": {
     "warmup": 20,
     "samples": 200,
-    "notes": "Startup is spawn until NODUM_PORT. Latency is sequential GET /health after warmup. RSS is VmRSS after samples. scriptc artifact is --optimization dev."
+    "notes": "Startup is spawn until NODUM_PORT. Latency is sequential GET /health after warmup. RSS is VmRSS after samples. Artifact: scriptc is the native app (--optimization dev); Node is the host node binary; Bun/Deno are --compile / compile (embedded engine). Deno compile uses --no-check and embedded this workspace's node_modules (441 MB) — not a product path."
   },
   "rows": [
     {
@@ -25,7 +25,8 @@
       "p95_ms": 0.62,
       "rps": 2834.4,
       "rss_kb": 3424,
-      "artifact_bytes": 945008
+      "artifact_bytes": 945008,
+      "artifact_kind": "native-app"
     },
     {
       "id": "node",
@@ -37,7 +38,8 @@
       "p95_ms": 0.62,
       "rps": 3010.1,
       "rss_kb": 83520,
-      "artifact_bytes": null
+      "artifact_bytes": 124674920,
+      "artifact_kind": "host-runtime"
     },
     {
       "id": "bun",
@@ -49,7 +51,8 @@
       "p95_ms": 0.92,
       "rps": 2635.4,
       "rss_kb": 81428,
-      "artifact_bytes": null
+      "artifact_bytes": 76889352,
+      "artifact_kind": "embedded-engine-compile"
     },
     {
       "id": "deno",
@@ -61,11 +64,12 @@
       "p95_ms": 0.65,
       "rps": 3008.2,
       "rss_kb": 78288,
-      "artifact_bytes": null
+      "artifact_bytes": 440998739,
+      "artifact_kind": "embedded-engine-compile"
     }
   ],
   "compile_contrast": {
     "bun_compile_bytes": 76889352,
-    "deno_compile_bytes": null
+    "deno_compile_bytes": 440998739
   }
 }

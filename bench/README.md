@@ -18,14 +18,23 @@ Paste this run vs the previous file into the PR Performance section.
 
 ## Metrics
 
-| Field     | Meaning                                                                 |
-| --------- | ----------------------------------------------------------------------- |
-| Startup   | Spawn until `NODUM_PORT=`                                               |
-| First GET | First `GET /health` after listen                                        |
-| p50 / p95 | Sequential GETs after 20 warmup, 200 samples (`performance.now()`)      |
-| req/s     | Those 200 samples                                                       |
-| RSS       | Linux `VmRSS` after samples                                             |
-| Artifact  | scriptc binary size; Bun `--compile` / Deno `compile` are contrast only |
+| Field     | Meaning                                                                                                                       |
+| --------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| Startup   | Spawn until `NODUM_PORT=`                                                                                                     |
+| First GET | First `GET /health` after listen                                                                                              |
+| p50 / p95 | Sequential GETs after 20 warmup, 200 samples (`performance.now()`)                                                            |
+| req/s     | Those 200 samples                                                                                                             |
+| RSS       | Linux `VmRSS` after samples                                                                                                   |
+| Artifact  | scriptc = native app (`bench/.out/health`); Node = host `node` binary; Bun/Deno = `--compile` / `compile` under `bench/.out/` |
+
+Binaries from `pnpm bench` (gitignored, rebuild locally):
+
+| File                     | What                                                                       |
+| ------------------------ | -------------------------------------------------------------------------- |
+| `bench/.out/health`      | Product — scriptc native (`--optimization dev`)                            |
+| `bench/.out/health.ll`   | LLVM IR from that build                                                    |
+| `bench/.out/health-bun`  | Bun `--compile` contrast                                                   |
+| `bench/.out/health-deno` | Deno `compile --no-check` contrast (embeds workspace `node_modules` today) |
 
 Do not fail CI only because Node JIT wins a hot numeric loop. FLAG native RSS/size approaching the Node/engine class, or a regression vs the previous saved row.
 

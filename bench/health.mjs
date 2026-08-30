@@ -1,7 +1,6 @@
 import { spawn } from 'node:child_process';
 import { mkdir, stat, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
-import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -41,18 +40,29 @@ if (scriptcBuild.status !== 0) {
   );
 }
 
+const bunCompileOut = join(outDir, 'health-bun');
+const denoCompileOut = join(outDir, 'health-deno');
+const bunCompile = present.bun
+  ? await tryCompileSize('bun', bunCompileOut)
+  : null;
+const denoCompile = present.deno
+  ? await tryCompileSize('deno', denoCompileOut)
+  : null;
+
 const targets = [
   {
     id: 'scriptc',
     label: 'scriptc native',
     argv: [scriptcBinary, '0'],
     artifact: scriptcBinary,
+    artifactKind: 'native-app',
   },
   {
     id: 'node',
     label: 'Node (tsx)',
     argv: [process.execPath, tsxBin, fixture, '0'],
-    artifact: null,
+    artifact: process.execPath,
+    artifactKind: 'host-runtime',
   },
 ];
 
@@ -61,7 +71,8 @@ if (present.bun) {
     id: 'bun',
     label: 'Bun (process)',
     argv: ['bun', fixture, '0'],
-    artifact: null,
+    artifact: bunCompileOut,
+    artifactKind: 'embedded-engine-compile',
   });
 }
 if (present.deno) {
@@ -78,7 +89,8 @@ if (present.deno) {
       fixture,
       '0',
     ],
-    artifact: null,
+    artifact: denoCompileOut,
+    artifactKind: 'embedded-engine-compile',
   });
 }
 
@@ -97,9 +109,6 @@ for (const target of targets) {
   }
 }
 
-const bunCompile = present.bun ? await tryCompileSize('bun') : null;
-const denoCompile = present.deno ? await tryCompileSize('deno') : null;
-
 const record = {
   id: 'health',
   fixture: 'e2e/fixtures/health.ts',
@@ -115,7 +124,7 @@ const record = {
     warmup: WARMUP,
     samples: SAMPLES,
     notes:
-      'Startup is spawn until NODUM_PORT. Latency is sequential GET /health after warmup. RSS is VmRSS after samples. scriptc artifact is --optimization dev.',
+      'Startup is spawn until NODUM_PORT. Latency is sequential GET /health after warmup. RSS is VmRSS after samples. Artifact: scriptc is the native app (--optimization dev) at bench/.out/health; Node is the host node binary; Bun/Deno are compile outputs at bench/.out/health-bun and health-deno. Deno compile uses --no-check and currently embeds workspace node_modules.',
   },
   rows,
   compile_contrast: {
@@ -177,9 +186,14 @@ async function measure(target) {
   child.kill('SIGTERM');
   await waitClose(child);
   const sorted = [...samples].sort((a, b) => a - b);
-  const artifactBytes = target.artifact
-    ? (await stat(target.artifact)).size
-    : null;
+  let artifactBytes = null;
+  if (target.artifact !== null) {
+    try {
+      artifactBytes = (await stat(target.artifact)).size;
+    } catch {
+      artifactBytes = null;
+    }
+  }
   return {
     id: target.id,
     label: target.label,
@@ -191,6 +205,7 @@ async function measure(target) {
     rps: Number((SAMPLES / (elapsedMs / 1000)).toFixed(1)),
     rss_kb: rssKb,
     artifact_bytes: artifactBytes,
+    artifact_kind: target.artifactKind,
   };
 }
 
@@ -306,8 +321,7 @@ async function versionLine(bin, args) {
   return text.split('\n')[0] ?? text;
 }
 
-async function tryCompileSize(kind) {
-  const dest = join(tmpdir(), `nodum-health-${kind}`);
+async function tryCompileSize(kind, dest) {
   try {
     if (kind === 'bun') {
       const result = await run('bun', [
@@ -323,6 +337,7 @@ async function tryCompileSize(kind) {
     }
     const result = await run('deno', [
       'compile',
+      '--no-check',
       '--allow-net',
       '--allow-env',
       '--allow-read',
@@ -351,7 +366,7 @@ function markdownTable(record) {
       continue;
     }
     lines.push(
-      `| ${row.label} | ${fmtMs(row.startup_ms)} | ${fmtMs(row.first_get_ms)} | ${fmtMs(row.p50_ms)} | ${fmtMs(row.p95_ms)} | ${String(row.rps)} | ${fmtRss(row.rss_kb)} | ${fmtBytes(row.artifact_bytes)} |`,
+      `| ${row.label} | ${fmtMs(row.startup_ms)} | ${fmtMs(row.first_get_ms)} | ${fmtMs(row.p50_ms)} | ${fmtMs(row.p95_ms)} | ${String(row.rps)} | ${fmtRss(row.rss_kb)} | ${fmtArtifact(row)} |`,
     );
   }
   const extra = [];
@@ -377,6 +392,20 @@ function fmtMs(value) {
 
 function fmtRss(kb) {
   return kb === null || kb === undefined ? '—' : `${String(kb)} KB`;
+}
+
+function fmtArtifact(row) {
+  const size = fmtBytes(row.artifact_bytes);
+  if (size === '—') {
+    return '—';
+  }
+  if (row.artifact_kind === 'host-runtime') {
+    return `${size} (node host)`;
+  }
+  if (row.artifact_kind === 'embedded-engine-compile') {
+    return `${size} (compile)`;
+  }
+  return size;
 }
 
 function fmtBytes(bytes) {
