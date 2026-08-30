@@ -25,7 +25,17 @@ Pin **`scriptc` `0.0.35`** exact (no `^`, no `~`). The compiler is Vercel Labs. 
 
 Every inner PR and every GSD execute/verify step must run **unit + Node E2E + scriptc**. CI (`.github/workflows/ci.yml`) is the hard gate. Do not land kernel or compiler work on green unit tests alone.
 
-User-facing API changes update `docs/guide/` in the same PR. The published site will be that guide, not a rewrite. `docs/scriptc-notes.md` is a contributor log, not site nav. Samples must match a runnable file (`e2e/fixtures/`, later `examples/`).
+User-facing API changes update `docs/guide/` in the same PR. The published site will be that guide, not a rewrite. Docusaurus is an approved site generator (versioned docs). `docs/scriptc-notes.md` is a contributor log, not site nav. Samples must match a runnable file (`e2e/fixtures/`, later `examples/`).
+
+## PR description
+
+Every user-facing PR body must include a **Performance** section (see `.github/pull_request_template.md`).
+
+- **Required:** scriptc native binary vs the **same sources** on **Node** (`node` / `tsx`): startup, request latency/throughput, RSS, artifact size.
+- **Optional:** Bun and Deno rows when those tools are on PATH (contrast only — they embed an engine).
+- Append the run to `bench/results/` when `pnpm bench` exists so later / bigger benches have a baseline. Until then, keep the heading and say the script is not landed yet.
+- Bench tooling is **devDependencies** only. Do not add Bun or Deno to `@nodum/core`.
+- Do not fail CI only because Node JIT is faster on a hot loop. FLAG native RSS/size looking like Node/engine, or a drop vs the last saved row.
 
 ## Architecture flags
 
