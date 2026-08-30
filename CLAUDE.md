@@ -25,6 +25,8 @@ Pin **`scriptc` `0.0.35`** exact (no `^`, no `~`). The compiler is Vercel Labs. 
 
 Every inner PR and every GSD execute/verify step must run **unit + Node E2E + scriptc**. CI (`.github/workflows/ci.yml`) is the hard gate. Do not land kernel or compiler work on green unit tests alone.
 
+User-facing API changes update `docs/guide/` in the same PR. The published site will be that guide, not a rewrite. `docs/scriptc-notes.md` is a contributor log, not site nav. Samples must match a runnable file (`e2e/fixtures/`, later `examples/`).
+
 ## Architecture flags
 
 **FLAG:** `@nodum/core` imported a runtime npm package. Core must stay static; classify the compile (`scriptc coverage`) before adding dependencies.

@@ -20,3 +20,7 @@ pnpm test:all      # all three
 ```
 
 CI runs the same gates on `main` and on every pull request.
+
+## Docs
+
+Human docs: [`docs/guide/`](docs/guide/). That folder is what the website will publish — not a separate site-only story. Contributor scriptc log: [`docs/scriptc-notes.md`](docs/scriptc-notes.md) (not site nav).
