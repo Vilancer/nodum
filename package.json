@@ -1,10 +1,15 @@
 {
   "name": "nodum",
   "private": true,
+  "type": "module",
   "license": "MIT",
   "packageManager": "pnpm@11.24.0",
   "scripts": {
-    "test": "pnpm exec nx run-many -t test --parallel=3",
+    "test": "pnpm exec nx run-many -t test --parallel=3 --exclude=nodum",
+    "test:e2e": "pnpm exec vitest run --config e2e/vitest.config.mts e2e/http-kernel.e2e.spec.ts",
+    "test:scriptc": "pnpm exec vitest run --config e2e/vitest.config.mts e2e/scriptc.e2e.spec.ts",
+    "test:all": "pnpm test && pnpm test:e2e && pnpm test:scriptc",
+    "bench": "node bench/health.mjs",
     "prepare": "husky"
   },
   "lint-staged": {
@@ -36,6 +41,7 @@
     "nx": "23.1.2",
     "prettier": "3.9.6",
     "scriptc": "0.0.35",
+    "tsx": "4.23.12",
     "typescript": "5.9.3",
     "typescript-eslint": "8.68.0",
     "vite": "8.2.2",
