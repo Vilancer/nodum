@@ -24,7 +24,7 @@ Pin **`scriptc` `0.0.35`** exact (no `^`, no `~`). The compiler is Vercel Labs. 
 - **Lint:** `pnpm exec nx run-many -t lint`
 - **Single project:** `pnpm exec nx run core:test`
 
-Every inner PR and every GSD execute/verify step must run **unit + Node E2E + scriptc**. CI (`.github/workflows/ci.yml`) is the hard gate. Do not land kernel or compiler work on green unit tests alone.
+Every PR must run **unit + Node E2E + scriptc**. CI (`.github/workflows/ci.yml`) is the hard gate. Do not land kernel or compiler work on green unit tests alone.
 
 User-facing API changes update `docs/guide/` in the same PR. The published site will be that guide, not a rewrite. Docusaurus is an approved site generator (versioned docs). `docs/scriptc-notes.md` is a contributor log, not site nav. Samples must match a runnable file (`e2e/fixtures/`, later `examples/`).
 
