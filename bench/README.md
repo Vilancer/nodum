@@ -1,41 +1,53 @@
 # Benches
 
-Standing evidence for PERF-01–04. The **product artifact** is the scriptc native binary. The **required** comparison is the same TypeScript sources under **Node** (`node` / `tsx`). **Bun** and **Deno** are optional contrast rows when those CLIs are on PATH — they ship an embedded engine (not Nodum’s runtime).
+Benches are how Nodum proves its promise: a native binary that starts in milliseconds, runs in a few MB and
+ships in hundreds of KB, with no Node on the box. A change that keeps tests green but loses that is a
+regression. Every user-facing PR runs `pnpm bench` and pastes the result.
 
-Tooling for this directory is **devDependencies** only. Do not import Bun or Deno from `@nodum/core`.
+The **product artifact** is the scriptc native binary. The **required** comparison is the same TypeScript
+sources under **Node** (`tsx`). **Bun** and **Deno** are optional contrast rows when those CLIs are on PATH:
+they embed an engine and are not Nodum's runtime.
+
+Tooling here is **devDependencies** only. Never import Bun or Deno from `@nodum/core`.
 
 ## Run
 
 From the inner repo root:
 
 ```bash
-pnpm bench
+pnpm bench                     # 3 rounds, median per cell
+env BENCH_ROUNDS=5 pnpm bench  # more rounds on a noisy machine
 ```
 
-That builds `e2e/fixtures/health.ts` with scriptc (`--optimization dev`), then measures scriptc native, Node via `tsx`, and Bun/Deno when present. It prints a markdown table and appends `results/<ISO>-health.json`.
-
-Paste this run vs the previous file into the PR Performance section.
+It builds `e2e/fixtures/health.ts` three times (`--optimization dev`, `release`, `speed`), then measures each
+build, Node via `tsx`, and Bun/Deno when present. Rounds interleave targets so background load hits all of
+them alike. It prints the table, a diff against the previous file in `results/`, the host load, and any
+**FLAG** lines, then saves `results/<ISO>-health.json`. Commit that file with the PR.
 
 ## Metrics
 
-| Field     | Meaning                                                                                                                       |
-| --------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| Startup   | Spawn until `NODUM_PORT=`                                                                                                     |
-| First GET | First `GET /health` after listen                                                                                              |
-| p50 / p95 | Sequential GETs after 20 warmup, 200 samples (`performance.now()`)                                                            |
-| req/s     | Those 200 samples                                                                                                             |
-| RSS       | Linux `VmRSS` after samples                                                                                                   |
-| Artifact  | scriptc = native app (`bench/.out/health`); Node = host `node` binary; Bun/Deno = `--compile` / `compile` under `bench/.out/` |
+| Field            | Meaning                                                                        |
+| ---------------- | ------------------------------------------------------------------------------ |
+| Startup          | Spawn until `NODUM_PORT=` is printed                                           |
+| First GET        | First `GET /health` on a fresh connection                                      |
+| p50 / p95, req/s | 500 sequential keep-alive GETs after 50 warmup                                 |
+| Load req/s, p99  | 5,000 GETs at concurrency 32 over keep-alive; p99 is per-request latency       |
+| RSS / Peak RSS   | Linux `VmRSS` after the sequential samples / `VmHWM` after load                |
+| Artifact         | scriptc: the native app per mode; Node: the host `node`; Bun/Deno: `--compile` |
 
-Binaries from `pnpm bench` (gitignored, rebuild locally):
+`release` is what ships (scriptc's default). `dev` stays for like-for-like with rows recorded before
+2026-10-10, which had a single `scriptc` row built with `--optimization dev`. `speed` is scriptc's opt-in
+mode (bigger binary, faster runtime), measured to see if it's worth it.
 
-| File                     | What                                                                       |
-| ------------------------ | -------------------------------------------------------------------------- |
-| `bench/.out/health`      | Product — scriptc native (`--optimization dev`)                            |
-| `bench/.out/health.ll`   | LLVM IR from that build                                                    |
-| `bench/.out/health-bun`  | Bun `--compile` contrast                                                   |
-| `bench/.out/health-deno` | Deno `compile --no-check` contrast (embeds workspace `node_modules` today) |
+## Reading the numbers
 
-Do not fail CI only because Node JIT wins a hot numeric loop. FLAG native RSS/size approaching the Node/engine class, or a regression vs the previous saved row.
+- **Compare rows from the same run.** Absolute ms move with the machine's load (the run prints it). Ratios
+  between rows, RSS and artifact size are what carry across runs.
+- **First GET:** engines already paid boot (and `tsx` its transform) before printing the port. Compare
+  startup + first GET together.
+- **Hot p50 / req/s:** Node's JIT is allowed to win a tight loop. Never fail a PR for that.
+- **FLAG** (printed automatically): native peak RSS above 16 MB, a native binary above 5 MB, or native RSS
+  or size more than 15% worse than the previous saved row. Explain or fix it in the PR; don't ignore it.
 
-Latest row: `results/2026-08-30T100547-health.json` (hello `/health` on this kernel).
+Binaries (gitignored, rebuilt each run): `bench/.out/health-{dev,release,speed}`, `bench/.out/health-bun`,
+`bench/.out/health-deno`.

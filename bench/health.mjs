@@ -1,6 +1,9 @@
 import { spawn } from 'node:child_process';
-import { mkdir, stat, writeFile } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
+import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { Agent, request } from 'node:http';
 import { createRequire } from 'node:module';
+import { cpus, loadavg } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -12,33 +15,60 @@ const require = createRequire(import.meta.url);
 const tsxBin = require.resolve('tsx/cli');
 const scriptcBin = join(repoRoot, 'node_modules/.bin/scriptc');
 
-const WARMUP = 20;
-const SAMPLES = 200;
+const ROUNDS = positiveInt(process.env.BENCH_ROUNDS, 3);
+const WARMUP = 50;
+const SAMPLES = 500;
+const LOAD_REQUESTS = 5000;
+const LOAD_CONCURRENCY = 32;
+const EXPECTED = '{"ok":true}';
+
+// Class bounds for the product binary (PERF-02/03). Crossing one is a FLAG, not a CI failure.
+const NATIVE_RSS_CLASS_KB = 16_000;
+const NATIVE_ARTIFACT_CLASS_BYTES = 5_000_000;
+// A scriptc row this much worse than the previous saved row is a FLAG.
+const REGRESSION_RATIO = 1.15;
 
 const present = {
-  bun: Boolean(await which('bun')),
-  deno: Boolean(await which('deno')),
+  bun: await which('bun'),
+  deno: await which('deno'),
 };
 
 await mkdir(outDir, { recursive: true });
 await mkdir(resultsDir, { recursive: true });
 
-const scriptcBinary = join(outDir, 'health');
-const scriptcBuild = await run(scriptcBin, [
-  'build',
-  fixture,
-  '-o',
-  scriptcBinary,
-  '--optimization',
-  'dev',
-  '--backend',
-  'llvm',
-]);
-if (scriptcBuild.status !== 0) {
-  throw new Error(
-    `scriptc build failed:\n${scriptcBuild.stderr}\n${scriptcBuild.stdout}`,
-  );
+const scriptcVersion = await versionLine(scriptcBin, ['--version']);
+const variants = ['dev', 'release', 'speed'];
+const targets = [];
+for (const optimization of variants) {
+  const binary = join(outDir, `health-${optimization}`);
+  const build = await run(scriptcBin, [
+    'build',
+    fixture,
+    '-o',
+    binary,
+    '--optimization',
+    optimization,
+  ]);
+  if (build.status !== 0) {
+    throw new Error(
+      `scriptc build (${optimization}) failed:\n${build.stderr}\n${build.stdout}`,
+    );
+  }
+  targets.push({
+    id: `scriptc-${optimization}`,
+    label: `scriptc native (${optimization})`,
+    argv: [binary, '0'],
+    artifact: binary,
+    artifactKind: 'native-app',
+  });
 }
+targets.push({
+  id: 'node',
+  label: 'Node (tsx)',
+  argv: [process.execPath, tsxBin, fixture, '0'],
+  artifact: process.execPath,
+  artifactKind: 'host-runtime',
+});
 
 const bunCompileOut = join(outDir, 'health-bun');
 const denoCompileOut = join(outDir, 'health-deno');
@@ -48,24 +78,6 @@ const bunCompile = present.bun
 const denoCompile = present.deno
   ? await tryCompileSize('deno', denoCompileOut)
   : null;
-
-const targets = [
-  {
-    id: 'scriptc',
-    label: 'scriptc native',
-    argv: [scriptcBinary, '0'],
-    artifact: scriptcBinary,
-    artifactKind: 'native-app',
-  },
-  {
-    id: 'node',
-    label: 'Node (tsx)',
-    argv: [process.execPath, tsxBin, fixture, '0'],
-    artifact: process.execPath,
-    artifactKind: 'host-runtime',
-  },
-];
-
 if (present.bun) {
   targets.push({
     id: 'bun',
@@ -94,19 +106,53 @@ if (present.deno) {
   });
 }
 
+const loadBefore = loadavg();
+// Rounds interleave targets so background load hits every target alike.
+const perTarget = new Map(targets.map((t) => [t.id, []]));
+const errors = new Map();
+for (let round = 0; round < ROUNDS; round += 1) {
+  for (const target of targets) {
+    if (errors.has(target.id)) {
+      continue;
+    }
+    try {
+      perTarget.get(target.id).push(await measure(target));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      errors.set(target.id, message.split('\n')[0] ?? message);
+    }
+  }
+}
+const loadAfter = loadavg();
+
 const rows = [];
 for (const target of targets) {
-  try {
-    rows.push(await measure(target));
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+  const runs = perTarget.get(target.id);
+  if (errors.has(target.id) || runs.length === 0) {
     rows.push({
       id: target.id,
       label: target.label,
       skipped: true,
-      error: message.split('\n')[0] ?? message,
+      error: errors.get(target.id) ?? 'no runs',
     });
+    continue;
   }
+  rows.push({
+    id: target.id,
+    label: target.label,
+    skipped: false,
+    startup_ms: median(runs.map((r) => r.startup_ms)),
+    first_get_ms: median(runs.map((r) => r.first_get_ms)),
+    p50_ms: median(runs.map((r) => r.p50_ms)),
+    p95_ms: median(runs.map((r) => r.p95_ms)),
+    rps: median(runs.map((r) => r.rps)),
+    load_rps: median(runs.map((r) => r.load_rps)),
+    load_p99_ms: median(runs.map((r) => r.load_p99_ms)),
+    rss_kb: median(runs.map((r) => r.rss_kb)),
+    peak_rss_kb: median(runs.map((r) => r.peak_rss_kb)),
+    artifact_bytes: await sizeOf(target.artifact),
+    artifact_kind: target.artifactKind,
+  });
 }
 
 const record = {
@@ -116,15 +162,22 @@ const record = {
   host: {
     os: process.platform,
     arch: process.arch,
+    cpus: cpus().length,
+    loadavg_1m_before: Number(loadBefore[0].toFixed(2)),
+    loadavg_1m_after: Number(loadAfter[0].toFixed(2)),
     node: process.version,
+    scriptc: scriptcVersion,
     bun: present.bun ? await versionLine('bun', ['-v']) : null,
     deno: present.deno ? await versionLine('deno', ['--version']) : null,
   },
   method: {
+    rounds: ROUNDS,
     warmup: WARMUP,
     samples: SAMPLES,
+    load_requests: LOAD_REQUESTS,
+    load_concurrency: LOAD_CONCURRENCY,
     notes:
-      'Startup is spawn until NODUM_PORT. Latency is sequential GET /health after warmup. RSS is VmRSS after samples. Artifact: scriptc is the native app (--optimization dev) at bench/.out/health; Node is the host node binary; Bun/Deno are compile outputs at bench/.out/health-bun and health-deno. Deno compile uses --no-check and currently embeds workspace node_modules.',
+      'Each cell is the median of the rounds; rounds interleave targets. Startup is spawn until NODUM_PORT. First GET is the first request on a fresh connection. p50/p95/req/s: sequential keep-alive GET /health after warmup. Load: concurrent keep-alive GETs; load p99 is per-request latency under that load. RSS is VmRSS after the sequential samples; peak RSS is VmHWM after load. Artifact: scriptc is the native app per optimization mode; Node is the host node binary; Bun/Deno are --compile / compile outputs (embedded engine).',
   },
   rows,
   compile_contrast: {
@@ -133,10 +186,37 @@ const record = {
   },
 };
 
+const previous = await latestRecord();
+const flags = findFlags(record, previous?.record);
+record.flags = flags;
+
 const stamp = record.recorded_at.slice(0, 19).replaceAll(':', '');
 const outFile = join(resultsDir, `${stamp}-health.json`);
 await writeFile(outFile, `${JSON.stringify(record, null, 2)}\n`);
-process.stdout.write(`${markdownTable(record)}\n\nWrote ${outFile}\n`);
+
+const out = [markdownTable(record)];
+if (previous !== null) {
+  out.push(
+    '',
+    `vs ${previous.file}:`,
+    '',
+    compareTable(record, previous.record),
+  );
+}
+out.push(
+  '',
+  `Host: ${String(record.host.cpus)} CPUs, load ${String(record.host.loadavg_1m_before)} → ${String(record.host.loadavg_1m_after)}, Node ${record.host.node}, scriptc ${scriptcVersion}`,
+);
+for (const flag of flags) {
+  out.push(`**FLAG:** ${flag}`);
+}
+if (record.host.loadavg_1m_before > record.host.cpus * 0.5) {
+  out.push(
+    `Note: the host was busy (load ${String(record.host.loadavg_1m_before)} on ${String(record.host.cpus)} CPUs). Compare ratios between rows, not absolute ms.`,
+  );
+}
+out.push('', `Wrote ${outFile}`);
+process.stdout.write(`${out.join('\n')}\n`);
 
 async function measure(target) {
   const started = performance.now();
@@ -153,60 +233,185 @@ async function measure(target) {
   child.stderr.on('data', (chunk) => {
     stderr += chunk.toString('utf8');
   });
-  const port = await waitForPort(
-    child,
-    () => stdout,
-    () => stderr,
-  );
-  const startupMs = roundMs(performance.now() - started);
-  const url = `http://127.0.0.1:${String(port)}/health`;
-  const first = performance.now();
-  const firstBody = await getHealth(url);
-  const firstGetMs = roundMs(performance.now() - first);
-  if (firstBody !== '{"ok":true}') {
-    child.kill('SIGTERM');
-    throw new Error(`${target.id} first GET got ${firstBody}`);
-  }
-  for (let i = 0; i < WARMUP; i += 1) {
-    await getHealth(url);
-  }
-  const samples = [];
-  const windowStart = performance.now();
-  for (let i = 0; i < SAMPLES; i += 1) {
-    const t0 = performance.now();
-    const body = await getHealth(url);
-    samples.push(performance.now() - t0);
-    if (body !== '{"ok":true}') {
-      child.kill('SIGTERM');
-      throw new Error(`${target.id} sample GET got ${body}`);
-    }
-  }
-  const elapsedMs = performance.now() - windowStart;
-  const rssKb = readRssKb(child.pid);
-  child.kill('SIGTERM');
-  await waitClose(child);
-  const sorted = [...samples].sort((a, b) => a - b);
-  let artifactBytes = null;
-  if (target.artifact !== null) {
+  try {
+    const port = await waitForPort(
+      child,
+      () => stdout,
+      () => stderr,
+    );
+    const startupMs = performance.now() - started;
+    const agent = new Agent({ keepAlive: true, maxSockets: LOAD_CONCURRENCY });
     try {
-      artifactBytes = (await stat(target.artifact)).size;
-    } catch {
-      artifactBytes = null;
+      const first = performance.now();
+      await getHealth(agent, port, target.id);
+      const firstGetMs = performance.now() - first;
+      for (let i = 0; i < WARMUP; i += 1) {
+        await getHealth(agent, port, target.id);
+      }
+      const samples = [];
+      const windowStart = performance.now();
+      for (let i = 0; i < SAMPLES; i += 1) {
+        const t0 = performance.now();
+        await getHealth(agent, port, target.id);
+        samples.push(performance.now() - t0);
+      }
+      const elapsedMs = performance.now() - windowStart;
+      const rssKb = readStatusKb(child.pid, 'VmRSS');
+      const load = await loadPhase(agent, port, target.id);
+      const peakRssKb = readStatusKb(child.pid, 'VmHWM');
+      samples.sort((a, b) => a - b);
+      return {
+        startup_ms: startupMs,
+        first_get_ms: firstGetMs,
+        p50_ms: percentile(samples, 0.5),
+        p95_ms: percentile(samples, 0.95),
+        rps: SAMPLES / (elapsedMs / 1000),
+        load_rps: load.rps,
+        load_p99_ms: load.p99,
+        rss_kb: rssKb,
+        peak_rss_kb: peakRssKb,
+      };
+    } finally {
+      agent.destroy();
     }
+  } finally {
+    child.kill('SIGTERM');
+    await waitClose(child);
+  }
+}
+
+async function loadPhase(agent, port, id) {
+  let next = 0;
+  const latencies = [];
+  const started = performance.now();
+  async function worker() {
+    while (next < LOAD_REQUESTS) {
+      next += 1;
+      const t0 = performance.now();
+      await getHealth(agent, port, id);
+      latencies.push(performance.now() - t0);
+    }
+  }
+  const workers = [];
+  for (let i = 0; i < LOAD_CONCURRENCY; i += 1) {
+    workers.push(worker());
+  }
+  await Promise.all(workers);
+  const elapsedMs = performance.now() - started;
+  latencies.sort((a, b) => a - b);
+  return {
+    rps: latencies.length / (elapsedMs / 1000),
+    p99: percentile(latencies, 0.99),
+  };
+}
+
+function getHealth(agent, port, id) {
+  return new Promise((resolve, reject) => {
+    const req = request(
+      { host: '127.0.0.1', port, path: '/health', agent },
+      (res) => {
+        let body = '';
+        res.setEncoding('utf8');
+        res.on('data', (chunk) => {
+          body += chunk;
+        });
+        res.on('end', () => {
+          if (res.statusCode !== 200 || body !== EXPECTED) {
+            reject(
+              new Error(`${id} GET /health: ${String(res.statusCode)} ${body}`),
+            );
+            return;
+          }
+          resolve();
+        });
+      },
+    );
+    req.on('error', reject);
+    req.end();
+  });
+}
+
+function findFlags(current, prev) {
+  const flags = [];
+  for (const row of current.rows) {
+    if (row.skipped || row.artifact_kind !== 'native-app') {
+      continue;
+    }
+    if (row.peak_rss_kb !== null && row.peak_rss_kb > NATIVE_RSS_CLASS_KB) {
+      flags.push(
+        `${row.label} peak RSS ${String(row.peak_rss_kb)} KB left the low-MB class (> ${String(NATIVE_RSS_CLASS_KB)} KB).`,
+      );
+    }
+    if (
+      row.artifact_bytes !== null &&
+      row.artifact_bytes > NATIVE_ARTIFACT_CLASS_BYTES
+    ) {
+      flags.push(
+        `${row.label} binary ${fmtBytes(row.artifact_bytes)} left the hundreds-of-KB class.`,
+      );
+    }
+    const before = prev === undefined ? undefined : previousRow(prev, row.id);
+    if (before === undefined || before.skipped) {
+      continue;
+    }
+    for (const key of ['rss_kb', 'artifact_bytes']) {
+      if (
+        before[key] !== null &&
+        row[key] !== null &&
+        row[key] > before[key] * REGRESSION_RATIO
+      ) {
+        flags.push(
+          `${row.label} ${key} regressed: ${String(before[key])} → ${String(row[key])}.`,
+        );
+      }
+    }
+  }
+  return flags;
+}
+
+// Rows before the multi-mode bench had a single `scriptc` row built with --optimization dev.
+function previousRow(prev, id) {
+  return (
+    prev.rows.find((r) => r.id === id) ??
+    (id === 'scriptc-dev'
+      ? prev.rows.find((r) => r.id === 'scriptc')
+      : undefined)
+  );
+}
+
+async function latestRecord() {
+  let files;
+  try {
+    files = (await readdir(resultsDir)).filter((f) =>
+      f.endsWith('-health.json'),
+    );
+  } catch {
+    return null;
+  }
+  files.sort();
+  const file = files.at(-1);
+  if (file === undefined) {
+    return null;
   }
   return {
-    id: target.id,
-    label: target.label,
-    skipped: false,
-    startup_ms: startupMs,
-    first_get_ms: firstGetMs,
-    p50_ms: roundMs(percentile(sorted, 0.5)),
-    p95_ms: roundMs(percentile(sorted, 0.95)),
-    rps: Number((SAMPLES / (elapsedMs / 1000)).toFixed(1)),
-    rss_kb: rssKb,
-    artifact_bytes: artifactBytes,
-    artifact_kind: target.artifactKind,
+    file,
+    record: JSON.parse(await readFile(join(resultsDir, file), 'utf8')),
   };
+}
+
+function median(values) {
+  const nums = values
+    .filter((v) => typeof v === 'number')
+    .sort((a, b) => a - b);
+  if (nums.length === 0) {
+    return null;
+  }
+  const mid = Math.floor(nums.length / 2);
+  const value =
+    nums.length % 2 === 1
+      ? nums[mid]
+      : ((nums[mid - 1] ?? 0) + (nums[mid] ?? 0)) / 2;
+  return Number(value.toFixed(2));
 }
 
 function percentile(sorted, q) {
@@ -220,18 +425,13 @@ function percentile(sorted, q) {
   return sorted[index] ?? null;
 }
 
-function roundMs(value) {
-  return value === null ? null : Number(value.toFixed(2));
-}
-
-function readRssKb(pid) {
+function readStatusKb(pid, field) {
   if (pid === undefined || process.platform !== 'linux') {
     return null;
   }
   try {
-    const { readFileSync } = require('node:fs');
     const text = readFileSync(`/proc/${String(pid)}/status`, 'utf8');
-    const match = /^VmRSS:\s+(\d+)\s+kB$/m.exec(text);
+    const match = new RegExp(`^${field}:\\s+(\\d+)\\s+kB$`, 'm').exec(text);
     return match?.[1] !== undefined ? Number(match[1]) : null;
   } catch {
     return null;
@@ -241,7 +441,6 @@ function readRssKb(pid) {
 function waitForPort(child, getStdout, getStderr) {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
-      child.kill('SIGTERM');
       reject(
         new Error(`no NODUM_PORT. stdout=${getStdout()} stderr=${getStderr()}`),
       );
@@ -274,23 +473,27 @@ function waitForPort(child, getStdout, getStderr) {
 
 function waitClose(child) {
   return new Promise((resolve) => {
-    if (child.exitCode !== null) {
+    if (child.exitCode !== null || child.signalCode !== null) {
       resolve();
       return;
     }
-    child.once('close', () => {
-      resolve();
-    });
-    setTimeout(() => {
+    const timer = setTimeout(() => {
       child.kill('SIGKILL');
       resolve();
     }, 2000);
+    child.once('close', () => {
+      clearTimeout(timer);
+      resolve();
+    });
   });
 }
 
-async function getHealth(url) {
-  const res = await fetch(url);
-  return await res.text();
+async function sizeOf(path) {
+  try {
+    return (await stat(path)).size;
+  } catch {
+    return null;
+  }
 }
 
 async function run(bin, args) {
@@ -303,6 +506,9 @@ async function run(bin, args) {
     });
     child.stderr.on('data', (chunk) => {
       stderr += chunk.toString('utf8');
+    });
+    child.on('error', () => {
+      resolve({ status: 1, stdout, stderr });
     });
     child.on('close', (status) => {
       resolve({ status, stdout, stderr });
@@ -322,62 +528,54 @@ async function versionLine(bin, args) {
 }
 
 async function tryCompileSize(kind, dest) {
-  try {
-    if (kind === 'bun') {
-      const result = await run('bun', [
-        'build',
-        '--compile',
-        fixture,
-        `--outfile=${dest}`,
-      ]);
-      if (result.status !== 0) {
-        return null;
-      }
-      return (await stat(dest)).size;
-    }
-    const result = await run('deno', [
-      'compile',
-      '--no-check',
-      '--allow-net',
-      '--allow-env',
-      '--allow-read',
-      '--sloppy-imports',
-      '-o',
-      dest,
-      fixture,
-    ]);
-    if (result.status !== 0) {
-      return null;
-    }
-    return (await stat(dest)).size;
-  } catch {
-    return null;
-  }
+  const args =
+    kind === 'bun'
+      ? ['build', '--compile', fixture, `--outfile=${dest}`]
+      : [
+          'compile',
+          '--no-check',
+          '--allow-net',
+          '--allow-env',
+          '--allow-read',
+          '--sloppy-imports',
+          '-o',
+          dest,
+          fixture,
+        ];
+  const result = await run(kind, args);
+  return result.status === 0 ? await sizeOf(dest) : null;
 }
 
-function markdownTable(record) {
+function positiveInt(raw, fallback) {
+  const n = Number(raw);
+  return Number.isInteger(n) && n > 0 ? n : fallback;
+}
+
+function markdownTable(rec) {
   const lines = [
-    `| Target | Startup | First GET | p50 | p95 | req/s | RSS | Artifact |`,
-    `| ------ | ------- | --------- | --- | --- | ----- | --- | -------- |`,
+    `| Target | Startup | First GET | p50 | p95 | req/s | Load req/s (c=${String(LOAD_CONCURRENCY)}) | Load p99 | RSS | Peak RSS | Artifact |`,
+    `| ------ | ------- | --------- | --- | --- | ----- | ---------- | -------- | --- | -------- | -------- |`,
   ];
-  for (const row of record.rows) {
+  for (const row of rec.rows) {
     if (row.skipped) {
-      lines.push(`| ${row.label} | skipped | | | | | | ${row.error ?? ''} |`);
+      lines.push(
+        `| ${row.label} | skipped | | | | | | | | | ${row.error ?? ''} |`,
+      );
       continue;
     }
     lines.push(
-      `| ${row.label} | ${fmtMs(row.startup_ms)} | ${fmtMs(row.first_get_ms)} | ${fmtMs(row.p50_ms)} | ${fmtMs(row.p95_ms)} | ${String(row.rps)} | ${fmtRss(row.rss_kb)} | ${fmtArtifact(row)} |`,
+      `| ${row.label} | ${fmtMs(row.startup_ms)} | ${fmtMs(row.first_get_ms)} | ${fmtMs(row.p50_ms)} | ${fmtMs(row.p95_ms)} | ${fmtNum(row.rps)} | ${fmtNum(row.load_rps)} | ${fmtMs(row.load_p99_ms)} | ${fmtKb(row.rss_kb)} | ${fmtKb(row.peak_rss_kb)} | ${fmtArtifact(row)} |`,
     );
   }
   const extra = [];
-  if (record.compile_contrast.bun_compile_bytes !== null) {
+  if (rec.compile_contrast.bun_compile_bytes !== null) {
     extra.push(
-      `Bun --compile size: ${fmtBytes(record.compile_contrast.bun_compile_bytes)}`,
+      `Bun --compile size: ${fmtBytes(rec.compile_contrast.bun_compile_bytes)}`,
     );
   }
-  if (record.compile_contrast.deno_compile_bytes !== null) {
+  if (rec.compile_contrast.deno_compile_bytes !== null) {
     extra.push(
-      `Deno compile size: ${fmtBytes(record.compile_contrast.deno_compile_bytes)}`,
+      `Deno compile size: ${fmtBytes(rec.compile_contrast.deno_compile_bytes)}`,
     );
   }
   if (extra.length > 0) {
@@ -386,11 +584,43 @@ function markdownTable(record) {
   return lines.join('\n');
 }
 
+function compareTable(current, prev) {
+  const lines = [
+    '| Target | Startup | First GET | p50 | req/s | RSS | Artifact |',
+    '| ------ | ------- | --------- | --- | ----- | --- | -------- |',
+  ];
+  for (const row of current.rows) {
+    const before = previousRow(prev, row.id);
+    if (row.skipped || before === undefined || before.skipped) {
+      continue;
+    }
+    lines.push(
+      `| ${row.label} | ${delta(before.startup_ms, row.startup_ms)} | ${delta(before.first_get_ms, row.first_get_ms)} | ${delta(before.p50_ms, row.p50_ms)} | ${delta(before.rps, row.rps)} | ${delta(before.rss_kb, row.rss_kb)} | ${delta(before.artifact_bytes, row.artifact_bytes)} |`,
+    );
+  }
+  return lines.join('\n');
+}
+
+function delta(before, after) {
+  if (typeof before !== 'number' || typeof after !== 'number' || before === 0) {
+    return '—';
+  }
+  const pct = ((after - before) / before) * 100;
+  const sign = pct >= 0 ? '+' : '';
+  return `${String(before)} → ${String(after)} (${sign}${pct.toFixed(0)}%)`;
+}
+
 function fmtMs(value) {
   return value === null || value === undefined ? '—' : `${String(value)} ms`;
 }
 
-function fmtRss(kb) {
+function fmtNum(value) {
+  return value === null || value === undefined
+    ? '—'
+    : String(Math.round(value));
+}
+
+function fmtKb(kb) {
   return kb === null || kb === undefined ? '—' : `${String(kb)} KB`;
 }
 
