@@ -92,8 +92,9 @@ describe('[e2e] scriptc', () => {
       [process.execPath, tsxCli, kernelFixture, '0'],
       process.env,
     );
-    const native = await startServer([binary, '0'], NO_NODE_ENV);
+    let native: Started | undefined;
     try {
+      native = await startServer([binary, '0'], NO_NODE_ENV);
       for (const c of CASES) {
         const fromNode = await request(node.port, c);
         const fromNative = await request(native.port, c);
@@ -108,7 +109,9 @@ describe('[e2e] scriptc', () => {
       });
     } finally {
       await stop(node);
-      await stop(native);
+      if (native !== undefined) {
+        await stop(native);
+      }
     }
   });
 });

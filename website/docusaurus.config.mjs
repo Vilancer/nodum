@@ -24,7 +24,9 @@ const config = {
           path: '../docs/guide',
           routeBasePath: '/',
           sidebarPath: './sidebars.mjs',
-          editUrl: 'https://github.com/Vilancer/nodum/edit/main/docs/guide/',
+          // A string editUrl gets the docs path appended again (docs/guide/../docs/guide/x.md).
+          editUrl: ({ docPath }) =>
+            `https://github.com/Vilancer/nodum/edit/main/docs/guide/${docPath}`,
         },
         blog: false,
         pages: false,
