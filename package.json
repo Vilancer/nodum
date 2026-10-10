@@ -10,11 +10,12 @@
     "test:scriptc": "pnpm exec vitest run --config e2e/vitest.config.mts e2e/scriptc.e2e.spec.ts",
     "test:all": "pnpm test && pnpm test:e2e && pnpm test:scriptc",
     "bench": "node bench/health.mjs",
+    "docs:build": "pnpm --filter nodum-website build",
     "prepare": "husky"
   },
   "lint-staged": {
     "*.{ts,tsx,js,jsx,mjs,cjs}": [
-      "eslint --fix --max-warnings=0",
+      "eslint --fix --max-warnings=0 --no-warn-ignored",
       "prettier --write"
     ],
     "*.{json,md,yml,yaml,css,html}": [
@@ -40,7 +41,7 @@
     "lint-staged": "17.4.1",
     "nx": "23.1.2",
     "prettier": "3.9.6",
-    "scriptc": "0.0.35",
+    "scriptc": "0.2.7",
     "tsx": "4.23.12",
     "typescript": "5.9.3",
     "typescript-eslint": "8.68.0",

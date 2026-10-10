@@ -4,7 +4,7 @@ All of this is `@nodum/core` on `node:http`. There is no Express, Fastify, Koa, 
 
 ## App and listen
 
-`createApp({ dev?: boolean })` returns the app. `listen(app, { port, host? })` binds `127.0.0.1` by default. `port` is required; `0` lets the OS pick. The handle is `{ port, close, server }`. `close()` is idempotent and drops SIGINT/SIGTERM listeners.
+`createApp({ dev?: boolean })` returns the app. `listen(app, { port, host? })` binds `127.0.0.1` by default. `port` is required; `0` lets the OS pick. The handle is `{ port, close, server }`. `close()` stops listening and closes every open connection right away, including requests still in flight (it does not wait for them to drain). It is idempotent and drops SIGINT/SIGTERM listeners.
 
 A second successful `listen()` on the same app throws. If bind fails (`EADDRINUSE`, bad host), the app is not left latched — you can call `listen()` again.
 
@@ -22,7 +22,7 @@ Handler return values: object/array → `200` JSON; `undefined` → `204` empty.
 
 ## Validation
 
-`handle({ params, query, body, run })` decodes only the keys you pass. Failure is `400` `BAD_REQUEST` with `{ code, message }` only (no `details` array). `s` is the in-tree schema: `string`, `number`, `boolean`, `object`, `optional`, `array`. No Zod in core.
+`handle({ params, query, body, run })` decodes only the keys you pass. On Node it works today; in a native build it doesn't compile statically yet (scriptc limitation, being worked on), so native apps validate by hand for now. Failure is `400` `BAD_REQUEST` with `{ code, message }` only (no `details` array). `s` is the in-tree schema: `string`, `number`, `boolean`, `object`, `optional`, `array`. No Zod in core.
 
 ## Errors
 

@@ -1,0 +1,75 @@
+{
+  "id": "health",
+  "fixture": "e2e/fixtures/health.ts",
+  "recorded_at": "2026-10-10T12:05:03.762Z",
+  "host": {
+    "os": "linux",
+    "arch": "x64",
+    "node": "v22.22.1",
+    "bun": "1.4.2",
+    "deno": "deno 2.7.14 (stable, release, x86_64-unknown-linux-gnu)"
+  },
+  "method": {
+    "warmup": 20,
+    "samples": 200,
+    "notes": "Startup is spawn until NODUM_PORT. Latency is sequential GET /health after warmup. RSS is VmRSS after samples. Artifact: scriptc is the native app (--optimization dev) at bench/.out/health; Node is the host node binary; Bun/Deno are compile outputs at bench/.out/health-bun and health-deno. Deno compile uses --no-check and currently embeds workspace node_modules."
+  },
+  "rows": [
+    {
+      "id": "scriptc",
+      "label": "scriptc native",
+      "skipped": false,
+      "startup_ms": 6.59,
+      "first_get_ms": 96.26,
+      "p50_ms": 0.95,
+      "p95_ms": 1.78,
+      "rps": 947,
+      "rss_kb": 3404,
+      "artifact_bytes": 945208,
+      "artifact_kind": "native-app"
+    },
+    {
+      "id": "node",
+      "label": "Node (tsx)",
+      "skipped": false,
+      "startup_ms": 606.14,
+      "first_get_ms": 9.95,
+      "p50_ms": 1.21,
+      "p95_ms": 2.61,
+      "rps": 682.4,
+      "rss_kb": 61220,
+      "artifact_bytes": 124674920,
+      "artifact_kind": "host-runtime"
+    },
+    {
+      "id": "bun",
+      "label": "Bun (process)",
+      "skipped": false,
+      "startup_ms": 107.68,
+      "first_get_ms": 19.94,
+      "p50_ms": 1.08,
+      "p95_ms": 2.38,
+      "rps": 781.6,
+      "rss_kb": 53364,
+      "artifact_bytes": 63491184,
+      "artifact_kind": "embedded-engine-compile"
+    },
+    {
+      "id": "deno",
+      "label": "Deno (process)",
+      "skipped": false,
+      "startup_ms": 165.52,
+      "first_get_ms": 6.59,
+      "p50_ms": 2.42,
+      "p95_ms": 10.61,
+      "rps": 209.2,
+      "rss_kb": 84348,
+      "artifact_bytes": 441009472,
+      "artifact_kind": "embedded-engine-compile"
+    }
+  ],
+  "compile_contrast": {
+    "bun_compile_bytes": 63491184,
+    "deno_compile_bytes": 441009472
+  }
+}

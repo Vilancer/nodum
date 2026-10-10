@@ -1,5 +1,7 @@
 packages:
   - 'packages/*'
+  - 'examples/*'
+  - 'website'
 
 allowBuilds:
   nx: true
@@ -7,6 +9,7 @@ allowBuilds:
   esbuild: true
   scriptc: true
   unrs-resolver: true
+  core-js: false
 
 minimumReleaseAgeExclude:
   - '@nx/devkit@23.1.2'

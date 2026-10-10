@@ -158,6 +158,33 @@ describe('listen GET /health', () => {
     expect(await res.text()).toBe('{"ok":true}');
   });
 
+  it('close() does not wait for an in-flight request to finish', async () => {
+    const app = createApp();
+    let release: () => void = () => undefined;
+    let entered: () => void = () => undefined;
+    const inHandler = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    app.get('/slow', async () => {
+      entered();
+      await new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      return { ok: true };
+    });
+    const local = await listen(app, { port: 0 });
+    const pending = fetch(`http://127.0.0.1:${local.port}/slow`).then(
+      () => 'answered',
+      () => 'dropped',
+    );
+    await inHandler;
+    const started = Date.now();
+    await local.close();
+    expect(Date.now() - started).toBeLessThan(1000);
+    expect(await pending).toBe('dropped');
+    release();
+  });
+
   it('removes SIGINT listeners on close and is idempotent', async () => {
     const app = createApp();
     app.get('/health', () => ({ ok: true }));

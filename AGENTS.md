@@ -11,22 +11,32 @@ Slogan: **Make it simple. Make it Node.**
 
 Public API is exported from each package’s `src/index.ts` barrel. Specs live as `*.spec.ts` next to sources.
 
-Pin **`scriptc` `0.0.35`** exact (no `^`, no `~`). The compiler is Vercel Labs. Classify Node vs binary mismatches, unexpected `SC` codes, coverage drops, and runtime traps. Do not paper over labs behavior.
+Pin **`scriptc` `0.2.7`** exact (no `^`, no `~`). An upgrade is a release event: read the changelog, rerun the gates and the bench, re-probe the open rows in `docs/scriptc-notes.md`, and log it there. The compiler is Vercel Labs. Classify Node vs binary mismatches, unexpected `SC` codes, coverage drops, and runtime traps. Do not paper over labs behavior.
 
 ## Commands (run from repo root)
 
 - **Unit:** `pnpm test` (Nx Vitest beside sources)
 - **Node E2E:** `pnpm test:e2e` (`[e2e]` specs in `e2e/`)
-- **scriptc:** `pnpm test:scriptc` (coverage must be fully static; native `/health` binary)
+- **scriptc:** `pnpm test:scriptc` (fully static coverage; the same requests on Node and on the native binary, which runs with no Node on PATH)
 - **All gates:** `pnpm test:all`
-- **Bench:** `pnpm bench` (hello `/health`; writes `bench/results/`)
+- **Bench:** `pnpm bench` (native dev/release/speed vs Node on `/health`; writes `bench/results/`, see `bench/README.md`)
 - **Build:** `pnpm exec nx run-many -t build`
 - **Lint:** `pnpm exec nx run-many -t lint`
 - **Single project:** `pnpm exec nx run core:test`
 
 Every PR must run **unit + Node E2E + scriptc**. CI (`.github/workflows/ci.yml`) is the hard gate. Do not land kernel or compiler work on green unit tests alone.
 
-User-facing API changes update `docs/guide/` in the same PR. The published site will be that guide, not a rewrite. Docusaurus is an approved site generator (versioned docs). `docs/scriptc-notes.md` is a contributor log, not site nav. Samples must match a runnable file (`e2e/fixtures/`, later `examples/`).
+## Benches matter
+
+Nodum's promise is measurable: a native binary that starts in milliseconds, runs in a few MB and ships in hundreds of KB, with no Node on the box. Tests prove it works; the bench proves it's still Nodum. Treat a bench regression like a failing test.
+
+- Run `pnpm bench` on every user-facing PR, on every scriptc upgrade, and on any change to the kernel's request path. Commit the new `bench/results/` file with the change.
+- Paste the table and the diff against the previous file into the PR. Read the host load line: compare rows from the same run, not absolute ms across machines.
+- The bench prints **FLAG** lines (native peak RSS above 16 MB, binary above 5 MB, or more than 15% worse than the last saved row). Every FLAG gets a cause and a fix or an explicit decision in the PR.
+- When you find something faster or smaller (a scriptc mode, a kernel change), prove it with a bench run before claiming it.
+- New features that add a request path (validation, CRUD) get a bench case of their own when they land.
+
+User-facing API changes update `docs/guide/` in the same PR. The published site will be that guide, not a rewrite. Docusaurus is an approved site generator (versioned docs). `docs/scriptc-notes.md` is a contributor log, not site nav. Samples must match a runnable file (`examples/`). The site in `website/` publishes `docs/guide/`.
 
 ## PR description
 

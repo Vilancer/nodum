@@ -69,6 +69,7 @@ export async function listen(
       server.close(() => {
         resolve();
       });
+      server.closeAllConnections();
     });
   }
   process.on('SIGINT', onSignal);
