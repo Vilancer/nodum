@@ -25,9 +25,11 @@ type Case = {
   body?: string;
 };
 
+const HEALTH: Case = { name: 'health', method: 'GET', path: '/health' };
+
 // The same requests run on Node and on the native binary; responses must match.
 const CASES: Case[] = [
-  { name: 'health', method: 'GET', path: '/health' },
+  HEALTH,
   { name: 'unknown route', method: 'GET', path: '/nope' },
   { name: 'path param', method: 'GET', path: '/items/a%20b' },
   { name: 'query last wins', method: 'GET', path: '/search?q=a&q=b' },
@@ -101,7 +103,7 @@ describe('[e2e] scriptc', () => {
         expect(fromNative, c.name).toEqual(fromNode);
       }
       // Pin the Node side too, so "both wrong the same way" can't pass.
-      const health = await request(node.port, CASES[0] as Case);
+      const health = await request(node.port, HEALTH);
       expect(health).toEqual({
         status: 200,
         contentType: 'application/json',

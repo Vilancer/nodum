@@ -22,5 +22,5 @@ app.get('/crash', () => {
   throw new Error('secret detail');
 });
 app.delete('/items/:id', () => undefined);
-const handleOut = await listen(app, { port });
-process.stdout.write(`NODUM_PORT=${String(handleOut.port)}\n`);
+const server = await listen(app, { port });
+process.stdout.write(`NODUM_PORT=${String(server.port)}\n`);

@@ -21,6 +21,18 @@ const SAMPLES = 500;
 const LOAD_REQUESTS = 5000;
 const LOAD_CONCURRENCY = 32;
 const EXPECTED = '{"ok":true}';
+// Per-round measurements; each saved cell is the median across rounds.
+const METRICS = [
+  'startup_ms',
+  'first_get_ms',
+  'p50_ms',
+  'p95_ms',
+  'rps',
+  'load_rps',
+  'load_p99_ms',
+  'rss_kb',
+  'peak_rss_kb',
+];
 
 // Class bounds for the product binary (PERF-02/03). Crossing one is a FLAG, not a CI failure.
 const NATIVE_RSS_CLASS_KB = 16_000;
@@ -141,15 +153,9 @@ for (const target of targets) {
     id: target.id,
     label: target.label,
     skipped: false,
-    startup_ms: median(runs.map((r) => r.startup_ms)),
-    first_get_ms: median(runs.map((r) => r.first_get_ms)),
-    p50_ms: median(runs.map((r) => r.p50_ms)),
-    p95_ms: median(runs.map((r) => r.p95_ms)),
-    rps: median(runs.map((r) => r.rps)),
-    load_rps: median(runs.map((r) => r.load_rps)),
-    load_p99_ms: median(runs.map((r) => r.load_p99_ms)),
-    rss_kb: median(runs.map((r) => r.rss_kb)),
-    peak_rss_kb: median(runs.map((r) => r.peak_rss_kb)),
+    ...Object.fromEntries(
+      METRICS.map((key) => [key, median(runs.map((r) => r[key]))]),
+    ),
     artifact_bytes: await sizeOf(target.artifact),
     artifact_kind: target.artifactKind,
   });
@@ -292,11 +298,8 @@ async function loadPhase(agent, port, id) {
       latencies.push(performance.now() - t0);
     }
   }
-  const workers = [];
-  for (let i = 0; i < LOAD_CONCURRENCY; i += 1) {
-    workers.push(worker());
-  }
-  await Promise.all(workers);
+  // Workers share `next` and `latencies`; JS runs them one callback at a time.
+  await Promise.all(Array.from({ length: LOAD_CONCURRENCY }, worker));
   const elapsedMs = performance.now() - started;
   latencies.sort((a, b) => a - b);
   return {
