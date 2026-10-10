@@ -150,3 +150,10 @@ tmp/
 .scriptc/
 bench/.out/
 
+
+# Example build outputs
+examples/*/hello
+examples/*/.scriptc/
+
+# Docs site
+website/build/

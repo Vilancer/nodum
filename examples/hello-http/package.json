@@ -1,0 +1,8 @@
+{
+  "name": "hello-http",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@nodum/core": "workspace:*"
+  }
+}
