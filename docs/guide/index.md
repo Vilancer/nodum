@@ -8,15 +8,22 @@ Nest capabilities without Nest configuration. You write TypeScript; you deploy a
 import { createApp, listen } from '@nodum/core';
 
 const app = createApp();
-app.get('/health', (ctx) => {
-  void ctx;
-  return { ok: true };
-});
-const handle = await listen(app, { port: 3000 });
+app.get('/health', () => ({ ok: true }));
+await listen(app, { port: 3000 });
 ```
 
-That shape is the same file `e2e/fixtures/health.ts` compiles with scriptc (port comes from argv there).
+That's the whole of `examples/hello-http/main.ts`. Run it, then build it:
+
+```bash
+pnpm exec scriptc run examples/hello-http/main.ts
+pnpm exec scriptc build examples/hello-http/main.ts -o hello
+./hello
+```
+
+`hello` is a native executable of a few hundred KB that answers `GET /health` with `{"ok":true}`, in about 3 MB of memory, with no Node installed.
 
 Packages: `@nodum/core` (kernel) · `@nodum/cli` (commands land later).
 
-Pinned compiler: **scriptc 0.0.35** (exact).
+Pinned compiler: **scriptc 0.2.7** (exact).
+
+Next: [HTTP kernel](http.md).
